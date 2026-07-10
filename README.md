@@ -50,7 +50,7 @@ q = (exp(rf · dt) − d) / (u − d)    # 위험중립확률
 
 ## 핵심 로직 설계
 
-위 원칙을 반영한 가격결정 엔진의 골격입니다. (실제 구현은 `src/`에서 단계적으로 진행)
+위 원칙을 반영한 가격결정 엔진의 골격입니다. (실제 구현은 `valuation/`에서 단계적으로 진행)
 
 ```python
 from dataclasses import dataclass
@@ -122,7 +122,8 @@ call_value = price(params, payoff=lambda s: np.maximum(s - 100, 0), american=Tru
 
 세부 구현과 엔지니어링은 단계적으로 진행합니다.
 
-- [ ] **패키지 구성**: 위 핵심 로직을 `src/` 파이썬 패키지로 구현하고 테스트 추가
+- [ ] **평가 스크립트 구현**: 위 핵심 로직을 `valuation/` 파이썬 스크립트로 구현하고 테스트 추가
+- [ ] **평가 실행 스킬 작성**: 입력 수집 → 평가 실행 → 결과 정리 절차를 표준화한 Claude Code 스킬(`.claude/skills/`) 작성
 - [ ] **검증 자동화**: Black-Scholes 수렴·풋-콜 패리티 테스트를 pytest로 상시 실행
 - [ ] **증권별 페이오프 확장**: 전환사채(CB), 상환전환우선주(RCPS)의 전환권·상환권·조기상환권(콜/풋) 페이오프 구현
 - [ ] **조건 반영**: 전환가액 조정(리픽싱), 배당, 희석효과 등 실무 평가조건 반영 (전체 트리 보관 모드 활용)
@@ -131,10 +132,17 @@ call_value = price(params, payoff=lambda s: np.maximum(s - 100, 0), american=Tru
 
 ## 프로젝트 구조 (예정)
 
+평가 로직은 파이썬 스크립트로, 평가 실행 절차는 Claude Code 스킬로 분리하여 구성합니다. 스크립트는 계산만 담당하고, 스킬이 입력 수집부터 결과 정리까지의 워크플로를 표준화합니다.
+
 ```
 이항모형/
-├── README.md            # 프로젝트 개요 (현재 문서)
-├── src/                 # 평가 로직 패키지 (예정)
-├── notebooks/           # 실험/검증용 노트북 (예정)
-└── tests/               # 검증 테스트 (예정)
+├── README.md                  # 프로젝트 개요 (현재 문서)
+├── valuation/                 # 평가 로직 파이썬 스크립트 (예정)
+│   ├── binomial.py            #   트리 엔진 (BinomialParams, price)
+│   ├── payoffs.py             #   증권별 페이오프 (콜/풋, CB, RCPS)
+│   └── run_valuation.py       #   평가 실행 진입점 (입력 → 평가 → 결과)
+├── .claude/
+│   └── skills/                # 평가 실행 스킬 (예정)
+├── notebooks/                 # 실험/검증용 노트북 (예정)
+└── tests/                     # 검증 테스트 (예정)
 ```
