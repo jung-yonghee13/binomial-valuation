@@ -2,103 +2,130 @@
 
 이항모형(Binomial Option Pricing Model)을 파이썬으로 구현하여 옵션성 증권의 가치평가(밸류에이션)를 자동화하는 프로젝트입니다.
 
-전환사채(CB), 상환전환우선주(RCPS) 등 옵션이 내재된 메자닌 증권의 공정가치 평가는 실무에서 주로 엑셀로 수행되지만, 단위기간이 촘촘해지거나(트리 노드 수 증가) 전환가액 조정(리픽싱)·조기상환권 같은 복잡한 조건이 붙으면 엑셀로는 관리가 어렵고 느려집니다. 이 프로젝트는 해당 계산 로직을 파이썬 코드로 옮겨 **재현 가능하고 확장 가능한 평가 파이프라인**을 만드는 것을 목표로 합니다.
-
-## 참고 자료
-
-- 계산 로직 원문(블로그): [파이썬을 이용한 이항모형 옵션가격결정 — pythoncpa](https://pythoncpa.tistory.com/2)
-- 참고 코드(Colab): [CRR_option_pricing.ipynb](https://colab.research.google.com/drive/1yap9HfNlKQ0qmMhO6mwM_w7lJyJJyTeB)
+전환사채(CB), 상환전환우선주(RCPS) 등 옵션이 내재된 메자닌 증권의 공정가치 평가는 실무에서 주로 엑셀로 수행되지만, 단위기간이 촘촘해지거나(트리 스텝 수 증가) 전환가액 조정(리픽싱)·조기상환권 같은 복잡한 조건이 붙으면 엑셀로는 관리가 어렵고 느려집니다. 이 프로젝트는 평가 로직을 파이썬 코드로 구현하여 **빠르고, 검증 가능하고, 확장 가능한 평가 파이프라인**을 만드는 것을 목표로 합니다.
 
 ## 이론적 배경: CRR 이항모형
 
-Cox-Ross-Rubinstein(1979) 모형은 기초자산(주가)이 매 단위기간마다 일정 배수로 상승(u)하거나 하락(d)한다고 가정하고, 위험중립확률(P)로 만기 페이오프를 역방향으로 할인하여 현재 옵션가치를 구합니다.
+Cox-Ross-Rubinstein(1979) 모형은 기초자산(주가)이 매 단위기간 `dt`마다 일정 배수로 상승(`u`)하거나 하락(`d`)한다고 가정하고, 위험중립확률(`q`)로 만기 페이오프의 기대값을 역방향으로 할인하여 현재 가치를 구합니다.
 
-| 기호 | 의미 | 예시 값 |
-|------|------|---------|
-| `S0` | 평가기준일 현재 주가 | 100 |
-| `V`  | 주가 변동성 (단위기간 기준) | 0.3 |
-| `T`  | 전체 기간 (트리 스텝 수) | 5 |
-| `dt` | 단위기간 | 1 |
-| `Rf` | 무위험이자율 (이산복리) | 0.05 |
-| `K`  | 행사가격 | 100 |
+| 기호 | 의미 |
+|------|------|
+| `s0` | 평가기준일 현재 주가 |
+| `sigma` | 주가 변동성 (연환산) |
+| `maturity` | 만기까지 기간 (연 단위) |
+| `steps` | 트리 스텝 수 (`dt = maturity / steps`) |
+| `rf` | 무위험이자율 (연속복리) |
+| `K` | 행사가격 (전환가액 등) |
 
 핵심 수식:
 
 ```
-u = exp(V · √dt)          # 주가 상승배수
-d = 1 / u                 # 주가 하락배수
-P = (exp(Rf · dt) − d) / (u − d)   # 위험중립확률
+u = exp(sigma · √dt)                # 주가 상승배수
+d = 1 / u                           # 주가 하락배수
+q = (exp(rf · dt) − d) / (u − d)    # 위험중립확률
+할인계수 = exp(−rf · dt)            # 위험중립확률과 동일한 복리 기준으로 할인
 ```
 
-단위기간(`dt`)을 작게 할수록 계산 결과는 Black-Scholes 모형의 해에 수렴합니다.
+스텝 수(`steps`)를 늘릴수록 계산 결과는 Black-Scholes 해석해에 수렴하며, 이 성질은 구현 검증(수렴 테스트)에 사용합니다.
 
-## 계산 절차 (참고 코드 로직)
+## 설계 원칙
 
-참고 코드는 세 단계로 구성됩니다.
+교과서적 구현(2차원 트리 행렬 + 이중 for문)은 이해하기 쉽지만 실무 자동화에는 비효율적이고 오류에 취약합니다. 이 프로젝트는 다음 원칙으로 구현합니다.
 
-### 1단계 — 기본 파라미터 계산
+**1. 벡터화된 역방향 귀납 — 트리 행렬을 만들지 않는다**
 
-입력 변수로부터 상승배수 `u`, 하락배수 `d`, 위험중립확률 `P`를 계산합니다.
+`(T+1) × (T+1)` 행렬에 셀 단위로 값을 채우는 대신, 만기 시점의 주가 배열(길이 `T+1`)에서 출발해 한 스텝씩 배열 연산으로 뒤로 이동합니다. 메모리는 O(T²) → O(T)로 줄고, 파이썬 루프 대신 numpy 연산을 쓰므로 스텝 수가 수천 단위여도 빠르게 계산됩니다. 다만 리픽싱처럼 경로별 조건이 필요한 경우에는 전체 트리를 명시적으로 보관하는 모드를 별도로 지원합니다.
+
+**2. 복리 기준의 일관성 — 확률과 할인은 같은 금리 관행을 쓴다**
+
+위험중립확률을 `exp(rf·dt)`(연속복리)로 계산했다면 할인도 반드시 `exp(−rf·dt)`로 해야 합니다. 확률은 연속복리로 만들고 할인은 `1/(1+rf)`(이산복리)로 하는 식의 혼용은 스텝 수가 커질수록 평가오차를 누적시키는 흔한 실수이므로, 금리 관행을 파라미터 객체 한 곳에서 강제합니다.
+
+**3. 입력 검증 — 잘못된 입력은 계산 전에 실패시킨다**
+
+변동성·기간·스텝 수의 양수 조건과 무차익거래 조건(`d < exp(rf·dt) < u`, 즉 `0 < q < 1`)을 파라미터 생성 시점에 검증합니다. 조건 위반 시 잘못된 평가액을 조용히 내놓는 대신 즉시 예외를 발생시킵니다.
+
+**4. 페이오프의 분리 — 모형과 증권 조건을 결합하지 않는다**
+
+트리 계산 엔진은 페이오프 함수를 인자로 받도록 분리합니다. 콜/풋, 유럽형/미국형은 물론 전환권·상환권·조기상환권이 얽힌 CB/RCPS 페이오프도 엔진 수정 없이 함수 교체만으로 평가할 수 있게 합니다.
+
+## 핵심 로직 설계
+
+위 원칙을 반영한 가격결정 엔진의 골격입니다. (실제 구현은 `src/`에서 단계적으로 진행)
 
 ```python
-import math as m
-
-S0, V, T, dt, Rf, K = 100, 0.3, 5, 1, 0.05, 100
-
-u = m.exp(V * m.sqrt(dt))
-d = 1 / u
-P = (m.exp(Rf * dt) - d) / (u - d)
-```
-
-### 2단계 — 주가 트리(Stock Price Tree) 생성
-
-`(T+1) × (T+1)` 상삼각 행렬을 만들어 각 노드에 `S0 · u^(time−node) · d^node`를 채웁니다. 행(`node`)은 하락 횟수, 열(`time`)은 경과 기간을 의미합니다.
-
-```python
+from dataclasses import dataclass
 import numpy as np
-import pandas as pd
 
-S_tree = pd.DataFrame(np.zeros((T + 1, T + 1)))
-for node in range(T + 1):
-    for time in range(T + 1):
-        if time >= node:
-            S_tree.loc[node, time] = S0 * m.pow(u, time - node) * m.pow(d, node)
+@dataclass(frozen=True)
+class BinomialParams:
+    s0: float        # 현재 주가
+    sigma: float     # 연환산 변동성
+    rf: float        # 무위험이자율 (연속복리)
+    maturity: float  # 만기 (연 단위)
+    steps: int       # 트리 스텝 수
+
+    def __post_init__(self):
+        if min(self.s0, self.sigma, self.maturity, self.steps) <= 0:
+            raise ValueError("s0, sigma, maturity, steps는 양수여야 합니다.")
+        if not (self.d < np.exp(self.rf * self.dt) < self.u):
+            raise ValueError("무차익거래 조건 위반: 위험중립확률이 (0, 1)을 벗어납니다.")
+
+    @property
+    def dt(self): return self.maturity / self.steps
+    @property
+    def u(self): return float(np.exp(self.sigma * np.sqrt(self.dt)))
+    @property
+    def d(self): return 1.0 / self.u
+    @property
+    def q(self): return (np.exp(self.rf * self.dt) - self.d) / (self.u - self.d)
+
+
+def price(params: BinomialParams, payoff, american: bool = False) -> float:
+    """벡터화된 역방향 귀납으로 옵션 현재가치를 계산한다.
+
+    payoff: 주가 배열을 받아 행사가치 배열을 반환하는 함수 (예: lambda s: np.maximum(s - K, 0))
+    american: True면 각 노드에서 계속보유가치와 행사가치 중 큰 값을 취한다.
+    """
+    disc = np.exp(-params.rf * params.dt)
+
+    # 만기 시점 주가: s[j] = s0 · u^j · d^(steps−j),  j = 0..steps
+    j = np.arange(params.steps + 1)
+    s = params.s0 * params.u ** j * params.d ** (params.steps - j)
+    v = payoff(s)
+
+    for _ in range(params.steps):            # 만기 → 현재로 한 스텝씩 이동
+        s = s[1:] * params.d                  # 직전 시점의 주가 배열
+        v = disc * (params.q * v[1:] + (1 - params.q) * v[:-1])
+        if american:
+            v = np.maximum(v, payoff(s))      # 조기행사 반영
+
+    return float(v[0])
 ```
 
-### 3단계 — 옵션가치 트리(역방향 귀납, Backward Induction)
-
-각 노드의 내재가치(행사가치) `max(S − K, 0)`를 구한 뒤, 만기 시점부터 현재 시점까지 위험중립확률로 기대값을 만들어 무위험이자율로 할인합니다. 각 노드에서는 **계속보유가치와 행사가치 중 큰 값**을 취합니다(미국형 옵션 대응).
+사용 예시:
 
 ```python
-# 내재가치(행사가치) 트리
-C_K_tree = pd.DataFrame(np.zeros((T + 1, T + 1)))
-for node in range(T + 1):
-    for time in range(T + 1):
-        if time >= node:
-            C_K_tree.loc[node, time] = max(S_tree.loc[node, time] - K, 0)
-
-# 옵션가치 트리 — 만기 페이오프에서 출발해 역방향 할인
-C_tree = pd.DataFrame(np.zeros((T + 1, T + 1)))
-C_tree[T] = C_K_tree[T]
-for node in range(T - 1, -1, -1):
-    for time in range(T - 1, -1, -1):
-        if time >= node:
-            continuation = (P * C_tree.loc[node, time + 1]
-                            + (1 - P) * C_tree.loc[node + 1, time + 1]) / (1 + Rf)
-            C_tree.loc[node, time] = max(continuation, C_K_tree.loc[node, time])
+params = BinomialParams(s0=100, sigma=0.3, rf=0.05, maturity=5, steps=1000)
+call_value = price(params, payoff=lambda s: np.maximum(s - 100, 0), american=True)
 ```
 
-`C_tree.loc[0, 0]`이 평가기준일 현재의 옵션가치이며, 위 예시 입력으로는 콜옵션 가치가 약 **37**로 산정됩니다.
+## 검증 전략
+
+구현의 정확성은 다음 방법으로 상호 검증합니다.
+
+- **해석해 수렴 테스트**: 유럽형 콜/풋 가치가 스텝 수 증가에 따라 Black-Scholes 해석해에 수렴하는지 확인
+- **풋-콜 패리티**: 동일 조건의 유럽형 콜·풋이 `C − P = S0 − K·exp(−rf·T)`를 만족하는지 확인
+- **경계 조건**: 변동성 0, 심내가격/심외가격 등 극단 입력에서의 기대값 확인
+- **기존 평가모델 대사**: 실무 엑셀 평가모델과 동일 입력으로 결과 대사(reconciliation)
 
 ## 자동화 로드맵
 
-참고 코드를 출발점으로 아래 방향으로 확장할 예정입니다. 세부 구현과 엔지니어링은 단계적으로 진행합니다.
+세부 구현과 엔지니어링은 단계적으로 진행합니다.
 
-- [ ] **모듈화**: 노트북 코드를 함수/클래스 기반 파이썬 패키지로 재구성 (`build_stock_tree`, `price_option` 등)
-- [ ] **성능 개선**: 이중 for문을 numpy 벡터 연산으로 대체하여 트리 스텝 수가 큰 경우에도 빠르게 계산
-- [ ] **검증**: Black-Scholes 해석해와의 수렴 테스트, 엑셀 평가모델과의 대사(reconciliation)
-- [ ] **증권별 페이오프 확장**: 콜/풋, 미국형/유럽형, 전환사채(CB), 상환전환우선주(RCPS)의 전환권·상환권·조기상환권(콜/풋) 반영
-- [ ] **조건 반영**: 전환가액 조정(리픽싱), 배당, 희석효과 등 실무 평가조건 반영
+- [ ] **패키지 구성**: 위 핵심 로직을 `src/` 파이썬 패키지로 구현하고 테스트 추가
+- [ ] **검증 자동화**: Black-Scholes 수렴·풋-콜 패리티 테스트를 pytest로 상시 실행
+- [ ] **증권별 페이오프 확장**: 전환사채(CB), 상환전환우선주(RCPS)의 전환권·상환권·조기상환권(콜/풋) 페이오프 구현
+- [ ] **조건 반영**: 전환가액 조정(리픽싱), 배당, 희석효과 등 실무 평가조건 반영 (전체 트리 보관 모드 활용)
 - [ ] **입력 자동화**: 평가 파라미터(변동성, 무위험이자율 등)의 외부 데이터 연동 및 입력 템플릿(엑셀/CSV) 지원
 - [ ] **결과 출력**: 평가조서에 활용 가능한 트리·요약 결과의 엑셀/리포트 출력
 
