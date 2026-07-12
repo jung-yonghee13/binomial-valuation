@@ -134,7 +134,7 @@ call_value = price(params, payoff=lambda s: np.maximum(s - 100, 0), american=Tru
 - [x] **변동성 자동 산출**: 피어그룹(대용기업 5개사)의 영업일 기준 주가 데이터를 API로 수집하여 각 사의 역사적 변동성(일별 로그수익률 표준편차의 연환산)을 계산하고 평균하여 기초자산 변동성으로 사용
 - [x] **무위험이자율 자동 산출**: 국고채 수익률 곡선에서 spot rate를 부트스트래핑하고 잔존만기에 보간하여 무위험이자율로 사용 (연속복리 환산). 단, KOFIA 채권정보센터 자동 수집은 미구현 — 수익률 곡선 JSON 수동 입력 폴백으로 동작하며 추후 자동화
 - [ ] **입력 자동화**: 그 외 평가 파라미터의 입력 템플릿(JSON/엑셀) 지원
-- [ ] **평가보고서 산출**: 최종 산출물로 평가보고서 자동 생성 — 평가개요·주요 가정·트리 요약·민감도 분석을 포함한 **PDF 보고서** 출력
+- [x] **평가보고서 산출**: 최종 산출물로 평가보고서 자동 생성 — 평가개요·주요 가정·트리 요약·민감도 분석을 포함한 **PDF 보고서** 출력 (`valuation/report.py`, Edge/Chrome headless 인쇄로 한글 폰트 처리)
 
 ## 프로젝트 구조 (예정)
 
@@ -153,13 +153,14 @@ call_value = price(params, payoff=lambda s: np.maximum(s - 100, 0), american=Tru
 │   ├── payoffs.py                     #   증권별 페이오프 (콜/풋; CB, RCPS 예정)
 │   ├── volatility.py                  #   피어그룹 주가 수집 및 변동성 산출
 │   ├── risk_free.py                   #   국고채 spot rate 부트스트래핑
-│   └── run_valuation.py               #   평가 실행 진입점 (입력 → 평가 → 교차검증 → 민감도)
+│   ├── run_valuation.py               #   평가 실행 진입점 (입력 → 평가 → 교차검증 → 민감도)
+│   └── report.py                      #   평가보고서 생성 (결과 JSON → HTML → PDF)
 ├── docs/
 │   └── conduct-guidelines.md          # 외부평가업무 행동 강령 (보고서 필수 기재사항 등)
 ├── .claude/
 │   └── skills/
 │       └── valuation-report/          # 가치평가~보고서 산출 워크플로 스킬
 ├── tests/                             # 검증 테스트 (pytest)
-├── reports/                           # 산출된 평가보고서 PDF (예정)
+├── reports/                           # 산출된 평가보고서 PDF
 └── notebooks/                         # 실험/검증용 노트북 (예정)
 ```

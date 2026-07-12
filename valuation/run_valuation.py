@@ -1,14 +1,17 @@
-"""평가 실행 진입점.
+"""평가 실행 진입점 — 전체 파이프라인을 한 번에 돌리는 파일.
 
-계약정보(JSON)와 평가 주요변수(JSON)를 입력받아
-  1) 변동성·무위험이자율 해석(자동 산출 또는 직접 입력)
-  2) CRR 이항모형 평가
-  3) 몬테카를로 교차검증 (유럽형)
-  4) 민감도 분석
-을 수행하고 결과 JSON을 저장한다. 이 결과가 평가보고서 생성의 입력이 된다.
+[이 파일이 하는 일]
+계약정보(JSON)와 평가 주요변수(JSON) 두 파일을 입력받아 아래 순서로 실행한다.
 
-사용 예:
-    python -m valuation.run_valuation --contract data/sample_contract.json \
+  1) 입력 해석  : 변동성·무위험이자율이 "auto"면 자동 산출, 숫자면 그대로 사용
+  2) 본 평가    : CRR 이항모형으로 콜옵션 1주당 가치 × 대상주식수량 = 총 평가액
+  3) 교차검증   : 몬테카를로로 독립 계산 → 95% 신뢰구간 합격/불합격 판정
+  4) 민감도 분석: 주요변수를 흔들었을 때 평가액이 얼마나 변하는지
+  5) 결과 저장  : 모든 산출 내역을 결과 JSON으로 저장
+                  → 이 JSON이 보고서 생성(valuation/report.py)의 입력이 된다
+
+[사용 예 — 터미널에서]
+    python -m valuation.run_valuation --contract data/sample_contract.json \\
         --inputs data/my_inputs.json --output-dir results
 """
 from __future__ import annotations
@@ -21,14 +24,16 @@ from pathlib import Path
 from valuation import monte_carlo, payoffs, risk_free, volatility
 from valuation.binomial import BinomialParams, price
 
-DAYS_PER_YEAR = 365.0  # ACT/365
+DAYS_PER_YEAR = 365.0  # 잔존만기 연 환산 기준 (ACT/365: 실제 일수 ÷ 365)
 
 
 def load_json(path) -> dict:
+    """UTF-8 JSON 파일을 읽어 dict로 반환한다."""
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def years_between(start: str, end: str) -> float:
+    """두 날짜 사이 기간을 연 단위로 환산한다 (예: 평가기준일 ~ 만기일)."""
     d0 = date.fromisoformat(str(start))
     d1 = date.fromisoformat(str(end))
     days = (d1 - d0).days
@@ -38,7 +43,12 @@ def years_between(start: str, end: str) -> float:
 
 
 def resolve_volatility(inputs: dict) -> dict:
-    """변동성을 해석한다: 숫자면 그대로, 'auto'면 피어그룹 자동 산출."""
+    """변동성 입력을 해석한다.
+
+    - 숫자면: 사용자가 직접 추정해 넣은 값으로 그대로 사용
+    - "auto"면: 피어그룹 주가를 수집해 역사적 변동성 평균을 자동 산출
+    반환 dict에는 값과 함께 산출 근거(basis)와 상세 내역(detail)이 담긴다.
+    """
     value = inputs["inputs"]["volatility"]
     if isinstance(value, (int, float)):
         return {"value": float(value), "basis": "사용자 직접 입력", "detail": None}
@@ -61,7 +71,12 @@ def resolve_volatility(inputs: dict) -> dict:
 
 
 def resolve_risk_free(inputs: dict, maturity_years: float) -> dict:
-    """무위험이자율을 해석한다: 숫자면 그대로(연속복리 가정), 'auto'면 spot rate 산출."""
+    """무위험이자율 입력을 해석한다.
+
+    - 숫자면: 연속복리 기준 값으로 간주하고 그대로 사용
+    - "auto"면: 국고채 수익률 곡선에서 잔존만기 대응 spot rate를 산출
+      (곡선은 ytm_curve_file로 지정한 JSON에서 로드, 없으면 KOFIA 수집 시도)
+    """
     value = inputs["inputs"]["risk_free_rate"]
     if isinstance(value, (int, float)):
         return {"value": float(value), "basis": "사용자 직접 입력 (연속복리 가정)", "detail": None}
@@ -74,6 +89,7 @@ def resolve_risk_free(inputs: dict, maturity_years: float) -> dict:
     if curve_file:
         curve = risk_free.load_ytm_curve(curve_file)
     else:
+        # KOFIA 자동 수집은 미구현 → 안내 메시지와 함께 예외 발생
         curve = risk_free.fetch_kofia_ytm(inputs["inputs"]["valuation_date"])
 
     rate = risk_free.spot_rate(curve["maturities"], curve["yields"], maturity_years)
@@ -94,7 +110,11 @@ def resolve_risk_free(inputs: dict, maturity_years: float) -> dict:
 def sensitivity_analysis(
     base: BinomialParams, payoff, american: bool, steps: int
 ) -> list[dict]:
-    """주요변수 변동에 따른 평가액 변화 (기초자산 ±10%, 변동성 ±5%p, 금리 ±1%p)."""
+    """민감도 분석: 주요변수를 하나씩 흔들어 재평가한다.
+
+    기본 시나리오: 기초자산 가액 ±10%, 변동성 ±5%p, 무위험이자율 ±1%p
+    보고서의 '민감도 분석' 표가 이 결과로 만들어진다.
+    """
     scenarios = [
         ("기초자산 가액 -10%", {"s0": base.s0 * 0.9}),
         ("기초자산 가액 +10%", {"s0": base.s0 * 1.1}),
@@ -105,6 +125,7 @@ def sensitivity_analysis(
     ]
     results = []
     for label, override in scenarios:
+        # 기준 파라미터를 복사한 뒤 해당 변수 하나만 바꿔서 재평가
         kwargs = {
             "s0": base.s0,
             "sigma": base.sigma,
@@ -127,16 +148,19 @@ def run(contract: dict, inputs: dict) -> dict:
     terms = contract["option_terms"]
     core = inputs["inputs"]
 
+    # ── 필수 입력 확인: 없으면 기본값으로 채우지 않고 즉시 중단 ──
     for key in ("valuation_date", "underlying_price_krw"):
         if not core.get(key):
             raise ValueError(f"주요변수 '{key}'가 입력되지 않았습니다.")
     if terms["option_type"] != "call":
         raise NotImplementedError("현재 콜옵션 평가만 지원합니다.")
 
+    # ── 1) 입력 해석 ──
     maturity_years = years_between(core["valuation_date"], core["maturity_date"])
     vol = resolve_volatility(inputs)
     rf = resolve_risk_free(inputs, maturity_years)
 
+    # 배당: pays_dividend가 True일 때만 배당수익률을 반영
     dividend = core.get("dividend", {})
     dividend_yield = float(dividend.get("dividend_yield", 0.0)) if dividend.get("pays_dividend") else 0.0
 
@@ -144,6 +168,7 @@ def run(contract: dict, inputs: dict) -> dict:
     steps = int(numerics.get("binomial_steps", 1000))
     american = terms.get("exercise_style", "european") != "european"
 
+    # ── 2) 본 평가: CRR 이항모형 ──
     params = BinomialParams(
         s0=float(core["underlying_price_krw"]),
         sigma=vol["value"],
@@ -154,10 +179,10 @@ def run(contract: dict, inputs: dict) -> dict:
     )
     payoff = payoffs.call(float(core["strike_price_krw"]))
 
-    unit_value = price(params, payoff, american=american)
+    unit_value = price(params, payoff, american=american)  # 1주당 가치
     quantity = int(terms["quantity_shares"])
 
-    # 몬테카를로 교차검증 (유럽형 전용, 미국형은 LSMC 구현 전까지 생략)
+    # ── 3) 몬테카를로 교차검증 (유럽형 전용, 미국형은 LSMC 구현 전까지 생략) ──
     if american:
         check = {"skipped": True, "reason": "미국형 조기행사는 LSMC 구현 후 교차검증 예정"}
     else:
@@ -170,6 +195,8 @@ def run(contract: dict, inputs: dict) -> dict:
         )
         check = monte_carlo.cross_check(unit_value, mc)
 
+    # ── 4~5) 민감도 분석 + 결과 조립 ──
+    # 이 dict가 결과 JSON으로 저장되며, 보고서 생성의 유일한 수치 원천이 된다
     return {
         "meta": {
             "engine": "CRR binomial (vectorized backward induction)",
@@ -200,6 +227,7 @@ def run(contract: dict, inputs: dict) -> dict:
 
 
 def main(argv=None) -> None:
+    """명령행 인터페이스: 인자 파싱 → 실행 → 결과 저장 → 요약 출력."""
     parser = argparse.ArgumentParser(description="이항모형 가치평가 실행")
     parser.add_argument("--contract", required=True, help="계약정보 JSON 경로")
     parser.add_argument("--inputs", required=True, help="평가 주요변수 JSON 경로")
@@ -210,6 +238,7 @@ def main(argv=None) -> None:
     inputs = load_json(args.inputs)
     result = run(contract, inputs)
 
+    # 결과 JSON 저장 (ensure_ascii=False: 한글을 그대로 저장)
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"valuation_result_{result['valuation_inputs']['valuation_date']}.json"
@@ -217,6 +246,7 @@ def main(argv=None) -> None:
         json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
+    # 터미널 요약 출력
     r = result["results"]
     cc = result["cross_check"]
     print(f"평가기준일: {result['valuation_inputs']['valuation_date']}")
