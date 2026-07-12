@@ -1,0 +1,10 @@
+# 핵심 의존성
+numpy
+pandas
+scipy
+
+# 테스트
+pytest
+
+# 시세 수집 (변동성 자동 산출)
+finance-datareader

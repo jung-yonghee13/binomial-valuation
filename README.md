@@ -125,14 +125,14 @@ call_value = price(params, payoff=lambda s: np.maximum(s - 100, 0), american=Tru
 
 세부 구현과 엔지니어링은 단계적으로 진행합니다.
 
-- [ ] **평가 스크립트 구현**: 위 핵심 로직을 `valuation/` 파이썬 스크립트로 구현하고 테스트 추가
-- [ ] **평가 실행 스킬 작성**: 입력 수집 → 평가 실행 → 결과 정리 절차를 표준화한 Claude Code 스킬(`.claude/skills/`) 작성
-- [ ] **검증 자동화**: Black-Scholes 수렴·풋-콜 패리티 테스트를 pytest로 상시 실행
-- [ ] **몬테카를로 교차검증**: 위험중립 경로 시뮬레이션 엔진 구현 및 이항모형 평가액과의 교차검증 (유럽형부터 시작, 조기행사·리픽싱은 LSMC로 확장)
+- [x] **평가 스크립트 구현**: 위 핵심 로직을 `valuation/` 파이썬 스크립트로 구현하고 테스트 추가
+- [x] **평가 실행 스킬 작성**: 입력 수집 → 평가 실행 → 결과 정리 절차를 표준화한 Claude Code 스킬(`.claude/skills/`) 작성
+- [x] **검증 자동화**: Black-Scholes 수렴·풋-콜 패리티 테스트를 pytest로 상시 실행 (`python -m pytest tests`)
+- [x] **몬테카를로 교차검증**: 위험중립 경로 시뮬레이션 엔진 구현 및 이항모형 평가액과의 교차검증 (유럽형 완료, 조기행사·리픽싱은 LSMC로 확장 예정)
 - [ ] **증권별 페이오프 확장**: 전환사채(CB), 상환전환우선주(RCPS)의 전환권·상환권·조기상환권(콜/풋) 페이오프 구현
 - [ ] **조건 반영**: 전환가액 조정(리픽싱), 배당, 희석효과 등 실무 평가조건 반영 (전체 트리 보관 모드 활용)
-- [ ] **변동성 자동 산출**: 피어그룹(대용기업 5개사)의 영업일 기준 주가 데이터를 API로 수집하여 각 사의 역사적 변동성(일별 로그수익률 표준편차의 연환산)을 계산하고 평균하여 기초자산 변동성으로 사용
-- [ ] **무위험이자율 자동 산출**: 금융투자협회 채권정보센터(KOFIA BIS)에서 국고채 수익률을 수집하고, spot rate를 산출하여 잔존만기에 대응하는 무위험이자율로 사용 (연속복리 환산)
+- [x] **변동성 자동 산출**: 피어그룹(대용기업 5개사)의 영업일 기준 주가 데이터를 API로 수집하여 각 사의 역사적 변동성(일별 로그수익률 표준편차의 연환산)을 계산하고 평균하여 기초자산 변동성으로 사용
+- [x] **무위험이자율 자동 산출**: 국고채 수익률 곡선에서 spot rate를 부트스트래핑하고 잔존만기에 보간하여 무위험이자율로 사용 (연속복리 환산). 단, KOFIA 채권정보센터 자동 수집은 미구현 — 수익률 곡선 JSON 수동 입력 폴백으로 동작하며 추후 자동화
 - [ ] **입력 자동화**: 그 외 평가 파라미터의 입력 템플릿(JSON/엑셀) 지원
 - [ ] **평가보고서 산출**: 최종 산출물로 평가보고서 자동 생성 — 평가개요·주요 가정·트리 요약·민감도 분석을 포함한 **PDF 보고서** 출력
 
@@ -145,18 +145,21 @@ call_value = price(params, payoff=lambda s: np.maximum(s - 100, 0), american=Tru
 ├── README.md                          # 프로젝트 개요 (현재 문서)
 ├── data/                              # 평가 입력 데이터
 │   ├── sample_contract.json           #   가상 계약 데이터 (검증용)
+│   ├── sample_ytm_curve.json          #   국고채 수익률 곡선 예시 (가상)
 │   └── valuation_inputs_template.json #   평가 주요변수 입력 템플릿
-├── valuation/                         # 평가 로직 파이썬 스크립트 (예정)
-│   ├── binomial.py                    #   트리 엔진 (BinomialParams, price)
+├── valuation/                         # 평가 로직 파이썬 스크립트
+│   ├── binomial.py                    #   트리 엔진 (BinomialParams, price, build_trees)
 │   ├── monte_carlo.py                 #   몬테카를로 교차검증 엔진 (추후 LSMC 확장)
-│   ├── payoffs.py                     #   증권별 페이오프 (콜/풋, CB, RCPS)
+│   ├── payoffs.py                     #   증권별 페이오프 (콜/풋; CB, RCPS 예정)
 │   ├── volatility.py                  #   피어그룹 주가 수집 및 변동성 산출
-│   ├── risk_free.py                   #   국고채 수익률 수집 및 spot rate 산출
-│   └── run_valuation.py               #   평가 실행 진입점 (입력 → 평가 → 결과)
+│   ├── risk_free.py                   #   국고채 spot rate 부트스트래핑
+│   └── run_valuation.py               #   평가 실행 진입점 (입력 → 평가 → 교차검증 → 민감도)
+├── docs/
+│   └── conduct-guidelines.md          # 외부평가업무 행동 강령 (보고서 필수 기재사항 등)
 ├── .claude/
 │   └── skills/
 │       └── valuation-report/          # 가치평가~보고서 산출 워크플로 스킬
+├── tests/                             # 검증 테스트 (pytest)
 ├── reports/                           # 산출된 평가보고서 PDF (예정)
-├── notebooks/                         # 실험/검증용 노트북 (예정)
-└── tests/                             # 검증 테스트 (예정)
+└── notebooks/                         # 실험/검증용 노트북 (예정)
 ```

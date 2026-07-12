@@ -15,5 +15,6 @@ Thumbs.db
 desktop.ini
 
 # 평가 산출물 (필요 시 조정)
+results/
 *.xlsx
 ~$*
