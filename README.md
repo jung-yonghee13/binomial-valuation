@@ -140,14 +140,19 @@ call_value = price(params, payoff=lambda s: np.maximum(s - 100, 0), american=Tru
 
 ```
 이항모형/
-├── README.md                  # 프로젝트 개요 (현재 문서)
-├── valuation/                 # 평가 로직 파이썬 스크립트 (예정)
-│   ├── binomial.py            #   트리 엔진 (BinomialParams, price)
-│   ├── monte_carlo.py         #   몬테카를로 교차검증 엔진 (추후 LSMC 확장)
-│   ├── payoffs.py             #   증권별 페이오프 (콜/풋, CB, RCPS)
-│   └── run_valuation.py       #   평가 실행 진입점 (입력 → 평가 → 결과)
+├── README.md                          # 프로젝트 개요 (현재 문서)
+├── data/                              # 평가 입력 데이터
+│   ├── sample_contract.json           #   가상 계약 데이터 (검증용)
+│   └── valuation_inputs_template.json #   평가 주요변수 입력 템플릿
+├── valuation/                         # 평가 로직 파이썬 스크립트 (예정)
+│   ├── binomial.py                    #   트리 엔진 (BinomialParams, price)
+│   ├── monte_carlo.py                 #   몬테카를로 교차검증 엔진 (추후 LSMC 확장)
+│   ├── payoffs.py                     #   증권별 페이오프 (콜/풋, CB, RCPS)
+│   └── run_valuation.py               #   평가 실행 진입점 (입력 → 평가 → 결과)
 ├── .claude/
-│   └── skills/                # 평가 실행 스킬 (예정)
-├── notebooks/                 # 실험/검증용 노트북 (예정)
-└── tests/                     # 검증 테스트 (예정)
+│   └── skills/
+│       └── valuation-report/          # 가치평가~보고서 산출 워크플로 스킬
+├── reports/                           # 산출된 평가보고서 (예정)
+├── notebooks/                         # 실험/검증용 노트북 (예정)
+└── tests/                             # 검증 테스트 (예정)
 ```

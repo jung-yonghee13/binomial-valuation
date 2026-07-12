@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "description": "가치평가 주요변수 입력 템플릿 — 평가자가 계약서 검토 후 합리적으로 추정하여 입력",
+    "contract_ref": "sample_contract.json"
+  },
+  "inputs": {
+    "valuation_date": null,
+    "underlying_price_krw": null,
+    "strike_price_krw": 12500,
+    "maturity_date": "2029-03-19",
+    "risk_free_rate": null,
+    "volatility": null,
+    "dividend": {
+      "pays_dividend": false,
+      "dividend_yield": 0.0
+    }
+  },
+  "numerics": {
+    "binomial_steps": 1000,
+    "monte_carlo_paths": 100000,
+    "monte_carlo_seed": 42,
+    "confidence_level": 0.95
+  },
+  "estimation_basis": {
+    "underlying_price_krw": "추정 근거 기재 (예: 최근 유상증자 발행가, 본질가치 평가액 등)",
+    "risk_free_rate": "추정 근거 기재 (예: 평가기준일 잔존만기 대응 국고채 수익률)",
+    "volatility": "추정 근거 기재 (예: 유사 상장기업 역사적 변동성 평균)"
+  }
+}

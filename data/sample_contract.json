@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "description": "콜옵션 가치평가 검증용 가상 계약 데이터 (실제 거래·실존 회사와 무관)",
+    "created": "2026-07-12"
+  },
+  "contract": {
+    "contract_name": "주식 콜옵션 부여 계약",
+    "contract_date": "2026-03-20",
+    "investor": "주식회사 한빛인베스트먼트",
+    "grantor": "주식회사 대한테크",
+    "governing_document": "주식 콜옵션 부여 계약서 (2026-03-20 체결)"
+  },
+  "underlying": {
+    "issuer": "주식회사 대한테크",
+    "security_type": "기명식 보통주",
+    "listing_status": "비상장",
+    "par_value_krw": 500
+  },
+  "option_terms": {
+    "option_type": "call",
+    "exercise_style": "european",
+    "quantity_shares": 150000,
+    "strike_price_krw": 12500,
+    "closing_date": "2029-03-19",
+    "exercise_window": "거래종결일에 일괄 행사",
+    "settlement": "차액 현금결제 또는 실물인수 중 투자자 선택"
+  }
+}
