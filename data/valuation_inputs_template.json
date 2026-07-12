@@ -1,6 +1,6 @@
 {
   "meta": {
-    "description": "가치평가 주요변수 입력 템플릿 — 평가자가 계약서 검토 후 합리적으로 추정하여 입력",
+    "description": "가치평가 주요변수 입력 템플릿 — 변동성·무위험이자율은 자동 산출, 나머지는 평가자가 계약서 검토 후 합리적으로 추정하여 입력",
     "contract_ref": "sample_contract.json"
   },
   "inputs": {
@@ -8,12 +8,31 @@
     "underlying_price_krw": null,
     "strike_price_krw": 12500,
     "maturity_date": "2029-03-19",
-    "risk_free_rate": null,
-    "volatility": null,
+    "risk_free_rate": "auto",
+    "volatility": "auto",
     "dividend": {
       "pays_dividend": false,
       "dividend_yield": 0.0
     }
+  },
+  "volatility_estimation": {
+    "method": "피어그룹 영업일 기준 일별 종가 → 로그수익률 표준편차 → √252 연환산 → 산술평균",
+    "peer_group": [
+      { "name": "안랩", "ticker": "053800" },
+      { "name": "더존비즈온", "ticker": "012510" },
+      { "name": "한글과컴퓨터", "ticker": "030520" },
+      { "name": "웹케시", "ticker": "053580" },
+      { "name": "알서포트", "ticker": "131370" }
+    ],
+    "peer_group_note": "임의 선정한 가상 피어그룹 (실무에서는 전기 보통주 평가의 대용기업을 승계하는 경우가 많음)",
+    "lookback_years": 1.0,
+    "annualization_factor": 252,
+    "data_source": "pykrx 또는 FinanceDataReader (KRX 시세)"
+  },
+  "risk_free_estimation": {
+    "method": "국고채 만기별 YTM → 부트스트래핑으로 spot rate 곡선 산출 → 잔존만기 보간 → 연속복리 환산",
+    "data_source": "금융투자협회 채권정보센터 (https://www.kofiabond.or.kr)",
+    "interpolation": "linear"
   },
   "numerics": {
     "binomial_steps": 1000,
@@ -23,7 +42,7 @@
   },
   "estimation_basis": {
     "underlying_price_krw": "추정 근거 기재 (예: 최근 유상증자 발행가, 본질가치 평가액 등)",
-    "risk_free_rate": "추정 근거 기재 (예: 평가기준일 잔존만기 대응 국고채 수익률)",
-    "volatility": "추정 근거 기재 (예: 유사 상장기업 역사적 변동성 평균)"
+    "risk_free_rate": "자동 산출 — 평가기준일 KOFIA 국고채 spot rate (산출 내역 자동 기록)",
+    "volatility": "자동 산출 — 피어그룹 5개사 역사적 변동성 평균 (피어별 내역 자동 기록)"
   }
 }
