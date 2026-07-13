@@ -133,14 +133,15 @@ def load_ytm_curve(path) -> dict:
 
 
 def fetch_kofia_ytm(date) -> dict:
-    """KOFIA 채권정보센터에서 평가기준일의 국고채 수익률을 수집한다 (미구현).
+    """KOFIA 국고채 수익률 자동 수집 — 파이썬 직접 수집은 지원하지 않는다.
 
-    KOFIA BIS는 공식 REST API를 제공하지 않아 페이지 데이터 요청 분석이 필요하다.
-    구현 전까지는 수동으로 수익률 곡선 JSON을 작성하여 load_ytm_curve()로 투입한다.
+    KOFIA BIS는 공식 REST API가 없다. 자동 수집은 에이전트가 Chrome 브라우저로
+    페이지를 열어 값을 읽는 방식으로 수행한다
+    (.claude/skills/valuation-report/SKILL.md 의 2-B-a 절차 참조).
+    에이전트가 수집 결과를 ytm_curve JSON으로 저장하면 load_ytm_curve()로 투입된다.
     """
     raise NotImplementedError(
-        "KOFIA 자동 수집은 아직 구현되지 않았습니다. "
-        "https://www.kofiabond.or.kr 에서 평가기준일 국고채 수익률을 확인하여 "
-        "수익률 곡선 JSON 파일을 작성한 뒤 입력 파일의 "
-        "risk_free_estimation.ytm_curve_file 로 지정하세요."
+        "KOFIA 수익률은 브라우저 수집 절차로 가져옵니다 (SKILL.md 2-B-a). "
+        "수집된 곡선 JSON을 입력 파일의 risk_free_estimation.ytm_curve_file 로 "
+        "지정하세요. (수동 입력 폴백도 동일 형식)"
     )
