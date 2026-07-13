@@ -21,8 +21,10 @@ import json
 from datetime import date, datetime
 from pathlib import Path
 
+import numpy as np
+
 from valuation import monte_carlo, payoffs, risk_free, volatility
-from valuation.binomial import BinomialParams, price
+from valuation.binomial import BinomialParams, price, price_with_curve
 
 DAYS_PER_YEAR = 365.0  # 잔존만기 연 환산 기준 (ACT/365: 실제 일수 ÷ 365)
 
@@ -107,39 +109,28 @@ def resolve_risk_free(inputs: dict, maturity_years: float) -> dict:
     }
 
 
-def sensitivity_analysis(
-    base: BinomialParams, payoff, american: bool, steps: int
-) -> list[dict]:
+def sensitivity_analysis(pricer, base_s0: float, base_sigma: float) -> list[dict]:
     """민감도 분석: 주요변수를 하나씩 흔들어 재평가한다.
 
-    기본 시나리오: 기초자산 가액 ±10%, 변동성 ±5%p, 무위험이자율 ±1%p
-    보고서의 '민감도 분석' 표가 이 결과로 만들어진다.
+    pricer(s0, sigma, rf_shift) 형태의 평가 함수를 받아 실행하므로
+    단일 금리/기간구조 어느 할인 방식이든 동일하게 동작한다.
+    기본 시나리오: 기초자산 가액 ±10%, 변동성 ±5%p, 무위험이자율 ±1%p(평행이동)
     """
     scenarios = [
-        ("기초자산 가액 -10%", {"s0": base.s0 * 0.9}),
-        ("기초자산 가액 +10%", {"s0": base.s0 * 1.1}),
-        ("변동성 -5%p", {"sigma": base.sigma - 0.05}),
-        ("변동성 +5%p", {"sigma": base.sigma + 0.05}),
-        ("무위험이자율 -1%p", {"rf": base.rf - 0.01}),
-        ("무위험이자율 +1%p", {"rf": base.rf + 0.01}),
+        ("기초자산 가액 -10%", {"s0": base_s0 * 0.9}),
+        ("기초자산 가액 +10%", {"s0": base_s0 * 1.1}),
+        ("변동성 -5%p", {"sigma": base_sigma - 0.05}),
+        ("변동성 +5%p", {"sigma": base_sigma + 0.05}),
+        ("무위험이자율 -1%p", {"rf_shift": -0.01}),
+        ("무위험이자율 +1%p", {"rf_shift": +0.01}),
     ]
     results = []
     for label, override in scenarios:
-        # 기준 파라미터를 복사한 뒤 해당 변수 하나만 바꿔서 재평가
-        kwargs = {
-            "s0": base.s0,
-            "sigma": base.sigma,
-            "rf": base.rf,
-            "maturity": base.maturity,
-            "steps": steps,
-            "dividend_yield": base.dividend_yield,
-            **override,
-        }
+        kwargs = {"s0": base_s0, "sigma": base_sigma, "rf_shift": 0.0, **override}
         if kwargs["sigma"] <= 0:
             results.append({"scenario": label, "value": None, "note": "변동성이 0 이하라 계산 불가"})
             continue
-        value = price(BinomialParams(**kwargs), payoff, american=american)
-        results.append({"scenario": label, "value": value, "note": None})
+        results.append({"scenario": label, "value": pricer(**kwargs), "note": None})
     return results
 
 
@@ -164,22 +155,70 @@ def run(contract: dict, inputs: dict) -> dict:
     dividend = core.get("dividend", {})
     dividend_yield = float(dividend.get("dividend_yield", 0.0)) if dividend.get("pays_dividend") else 0.0
 
+    # 트리 스텝 결정: step_unit="weekly"면 실무 방식대로 주 단위 그리드 사용
     numerics = inputs.get("numerics", {})
-    steps = int(numerics.get("binomial_steps", 1000))
+    step_unit = numerics.get("step_unit")
+    if step_unit == "weekly":
+        steps = max(1, round(maturity_years * 365 / 7))
+    elif step_unit:
+        raise ValueError("step_unit은 'weekly' 또는 미지정(null)이어야 합니다.")
+    else:
+        steps = int(numerics.get("binomial_steps", 1000))
+    step_years = maturity_years / steps
     american = terms.get("exercise_style", "european") != "european"
 
-    # ── 2) 본 평가: CRR 이항모형 ──
-    params = BinomialParams(
-        s0=float(core["underlying_price_krw"]),
-        sigma=vol["value"],
-        rf=rf["value"],
-        maturity=maturity_years,
-        steps=steps,
-        dividend_yield=dividend_yield,
-    )
+    # 할인 방식: "spot"(단일 spot rate) 또는 "term_structure"(스텝별 선도이자율)
+    discounting = inputs.get("risk_free_estimation", {}).get("discounting", "spot")
+    if discounting not in ("spot", "term_structure"):
+        raise ValueError("discounting은 'spot' 또는 'term_structure'여야 합니다.")
+
+    s0 = float(core["underlying_price_krw"])
+    sigma = vol["value"]
     payoff = payoffs.call(float(core["strike_price_krw"]))
 
-    unit_value = price(params, payoff, american=american)  # 1주당 가치
+    # MC 교차검증·보고서용 파라미터 (rf는 만기 대응 spot rate — 유럽형에서는
+    # 결정론적 기간구조 하의 할인과 동치이므로 교차검증 기준으로 유효하다)
+    params = BinomialParams(
+        s0=s0, sigma=sigma, rf=rf["value"], maturity=maturity_years,
+        steps=steps, dividend_yield=dividend_yield,
+    )
+
+    # ── 2) 본 평가: 할인 방식에 따라 평가 함수(pricer)를 구성 ──
+    if discounting == "term_structure":
+        detail = rf.get("detail")
+        if not detail:
+            raise ValueError(
+                "기간구조 할인에는 수익률 곡선이 필요합니다: "
+                "risk_free_rate='auto'로 두고 ytm_curve_file을 지정하세요."
+            )
+        curve_m = np.asarray(detail["maturities"], dtype=float)
+        curve_y = np.asarray(detail["yields"], dtype=float)
+
+        def pricer(s0, sigma, rf_shift=0.0):
+            # 금리 시나리오는 수익률 곡선 전체를 평행이동하여 반영
+            forwards = risk_free.step_forward_rates(
+                curve_m, curve_y + rf_shift, step_years, steps
+            )
+            return price_with_curve(
+                s0, sigma, step_years, forwards, payoff,
+                american=american, dividend_yield=dividend_yield,
+            )
+
+        rf["basis"] += " + 스텝별 선도이자율 할인 (기간구조 반영)"
+        rf["detail"]["step_forward_rates"] = [
+            round(float(f), 10)
+            for f in risk_free.step_forward_rates(curve_m, curve_y, step_years, steps)
+        ]
+    else:
+
+        def pricer(s0, sigma, rf_shift=0.0):
+            p = BinomialParams(
+                s0=s0, sigma=sigma, rf=rf["value"] + rf_shift,
+                maturity=maturity_years, steps=steps, dividend_yield=dividend_yield,
+            )
+            return price(p, payoff, american=american)
+
+    unit_value = pricer(s0, sigma)  # 1주당 가치
     quantity = int(terms["quantity_shares"])
 
     # ── 3) 몬테카를로 교차검증 (유럽형 전용, 미국형은 LSMC 구현 전까지 생략) ──
@@ -215,6 +254,9 @@ def run(contract: dict, inputs: dict) -> dict:
             "dividend_yield": dividend_yield,
             "exercise_style": terms.get("exercise_style"),
             "binomial_steps": steps,
+            "step_years": step_years,
+            "step_unit": step_unit,
+            "discounting": discounting,
         },
         "results": {
             "unit_value_krw": unit_value,
@@ -222,7 +264,7 @@ def run(contract: dict, inputs: dict) -> dict:
             "total_value_krw": unit_value * quantity,
         },
         "cross_check": check,
-        "sensitivity": sensitivity_analysis(params, payoff, american, steps),
+        "sensitivity": sensitivity_analysis(pricer, s0, sigma),
     }
 
 

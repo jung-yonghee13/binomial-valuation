@@ -31,11 +31,14 @@
   },
   "risk_free_estimation": {
     "method": "국고채 만기별 YTM → 부트스트래핑으로 spot rate 곡선 산출 → 잔존만기 보간 → 연속복리 환산",
-    "data_source": "금융투자협회 채권정보센터 (https://www.kofiabond.or.kr)",
-    "interpolation": "linear"
+    "data_source": "금융투자협회 채권정보센터 (https://www.kofiabond.or.kr) — 브라우저 수집 (SKILL.md 2-B-a)",
+    "interpolation": "linear",
+    "discounting": "term_structure",
+    "ytm_curve_file": null
   },
   "numerics": {
     "binomial_steps": 1000,
+    "step_unit": "weekly",
     "monte_carlo_paths": 100000,
     "monte_carlo_seed": 42,
     "confidence_level": 0.95

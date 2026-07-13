@@ -350,6 +350,8 @@ def build_report_html(contract: dict, result: dict) -> str:
   <tr><td>잔존만기</td><td class='num'>{vi['maturity_years']:.4f} 년</td><td>평가기준일 ~ 거래종결일 (ACT/365)</td></tr>
   <tr><td>주가 변동성</td><td class='num'>{pct(vol['value'])}</td><td>{esc(vol['basis'])}</td></tr>
   <tr><td>무위험이자율</td><td class='num'>{pct(rf['value'], 4)}</td><td>{esc(rf['basis'])}</td></tr>
+  <tr><td>할인 방식</td><td class='num'>{'기간구조' if vi.get('discounting') == 'term_structure' else '단일 금리'}</td>
+      <td>{'수익률곡선에서 도출한 스텝별 선도이자율로 위험중립확률·할인을 매 스텝 적용' if vi.get('discounting') == 'term_structure' else '만기 대응 spot rate를 전체 기간에 적용'}</td></tr>
   <tr><td>배당수익률</td><td class='num'>{pct(vi['dividend_yield'])}</td><td>기초자산 배당 정책 반영</td></tr>
 </table>
 

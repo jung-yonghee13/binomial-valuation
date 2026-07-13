@@ -135,6 +135,7 @@ def price_with_curve(
     step_rates: np.ndarray,
     payoff: Payoff,
     american: bool = False,
+    dividend_yield: float = 0.0,
 ) -> float:
     """기간구조(스텝별 선도이자율)를 반영한 CRR 이항모형 가치평가.
 
@@ -165,12 +166,14 @@ def price_with_curve(
     d = 1.0 / u
 
     # 스텝별 성장배수와 위험중립확률 — 무차익거래 조건을 스텝마다 검증
+    # 배당이 있으면 위험중립 성장배수에서 배당수익률만큼 차감 (할인은 이자율로만)
     growth = 1.0 + rates
-    if not np.all((d < growth) & (growth < u)):
+    growth_rn = growth * np.exp(-dividend_yield * step_years)
+    if not np.all((d < growth_rn) & (growth_rn < u)):
         raise ValueError(
             "무차익거래 조건 위반: 일부 스텝에서 위험중립확률이 (0, 1)을 벗어납니다."
         )
-    q = (growth - d) / (u - d)
+    q = (growth_rn - d) / (u - d)
 
     # 만기 시점 주가 배열에서 출발해 역방향 귀납 (price()와 동일한 방식)
     j = np.arange(steps + 1)
