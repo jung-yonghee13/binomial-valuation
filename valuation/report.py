@@ -36,40 +36,91 @@ BROWSER_CANDIDATES = [
     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
 ]
 
+# 삼일PwC 리서치 문서 톤의 스타일: 오렌지 포인트 컬러, 명조체 대제목,
+# 그라데이션 표지, 큰 오렌지 챕터 번호(01·02·03), 산세리프 본문과 넉넉한 여백
 CSS = """
-@page { size: A4; margin: 22mm 18mm; }
-* { box-sizing: border-box; }
+@page { size: A4; margin: 20mm 18mm; }
+* { box-sizing: border-box;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+:root {
+  --orange: #D04A02;        /* PwC 오렌지 */
+  --orange-bright: #FB5607;
+  --orange-pale: #FBE9DE;
+  --ink: #2d2d2d;
+  --gray: #6b6b6b;
+  --line: #d9d9d9;
+}
 body {
   font-family: 'Malgun Gothic', '맑은 고딕', sans-serif;
-  font-size: 10.5pt; line-height: 1.65; color: #1a1a1a; margin: 0;
+  font-size: 10pt; line-height: 1.7; color: var(--ink); margin: 0;
 }
-h1 { font-size: 17pt; margin: 0 0 4mm; }
-h2 { font-size: 13.5pt; border-bottom: 2px solid #2c3e60; padding-bottom: 2mm;
-     margin: 10mm 0 5mm; color: #2c3e60; page-break-after: avoid; }
-h3 { font-size: 11.5pt; margin: 7mm 0 3mm; color: #2c3e60; page-break-after: avoid; }
-table { border-collapse: collapse; width: 100%; margin: 3mm 0 5mm; page-break-inside: avoid; }
-th, td { border: 1px solid #b8bfcc; padding: 1.6mm 2.5mm; font-size: 9.5pt; }
-th { background: #eef1f7; font-weight: 600; text-align: left; }
+.serif { font-family: 'Batang', '바탕', 'Noto Serif KR', Georgia, serif; }
+
+/* ── 표지: 화이트 → 피치 그라데이션, 명조 대제목 ── */
+.cover {
+  height: 254mm; padding: 14mm 12mm; page-break-after: always;
+  background: linear-gradient(135deg, #ffffff 30%, #fde3d3 65%, #f8ab77 100%);
+  display: flex; flex-direction: column;
+}
+.cover .brand { font-size: 13pt; font-weight: 700; letter-spacing: 0.02em; }
+.cover .brand .bar { display: inline-block; width: 9mm; height: 2.2mm;
+  background: var(--orange-bright); margin-right: 3mm; vertical-align: middle; }
+.cover .mid { margin-top: 70mm; }
+.cover .label { font-size: 11.5pt; font-weight: 700; margin-bottom: 5mm; }
+.cover .title { font-size: 27pt; line-height: 1.35; font-weight: 700;
+  font-family: 'Batang', '바탕', Georgia, serif; }
+.cover .subject { font-size: 11pt; margin-top: 8mm; color: #3a3a3a; }
+.cover .bottom { margin-top: auto; }
+.cover .date { font-size: 11pt; font-weight: 600; margin-bottom: 6mm; }
+.cover .fictional {
+  display: inline-block; padding: 2.2mm 6mm; margin-bottom: 5mm;
+  border: 1.6px solid var(--orange); color: var(--orange);
+  font-weight: 700; font-size: 10pt; background: rgba(255,255,255,0.6);
+}
+.cover .disclaimer { font-size: 8pt; color: #5a5a5a; line-height: 1.6;
+  border-top: 1px solid rgba(0,0,0,0.25); padding-top: 3mm; }
+
+/* ── 목차 ── */
+.toc { page-break-after: always; padding-top: 10mm; }
+.toc .toc-title { font-size: 20pt; font-weight: 700; margin-bottom: 12mm;
+  font-family: 'Batang', '바탕', Georgia, serif; }
+.toc ol { line-height: 2.2; font-size: 10.5pt; }
+.toc > ol > li { font-weight: 700; margin-bottom: 3mm; }
+.toc ol ol { font-weight: 400; font-size: 10pt; color: #444; }
+
+/* ── 챕터 헤드: 큰 오렌지 번호 + 명조 제목 ── */
+.chapter { page-break-before: always; }
+.chapter-head { display: flex; align-items: flex-start; gap: 7mm;
+  margin: 4mm 0 9mm; page-break-after: avoid; }
+.chapter-num { font-size: 38pt; font-weight: 700; line-height: 1;
+  color: var(--orange-bright); letter-spacing: -0.02em; }
+.chapter-title { font-size: 17pt; font-weight: 700; line-height: 1.35;
+  font-family: 'Batang', '바탕', Georgia, serif; padding-top: 2mm; }
+.chapter-sub { font-size: 10.5pt; font-weight: 700; color: var(--ink); }
+
+h3 { font-size: 11.5pt; margin: 8mm 0 3mm; page-break-after: avoid;
+  border-left: 3.5px solid var(--orange-bright); padding-left: 3mm; }
+h4 { font-size: 10.5pt; margin: 6mm 0 2.5mm; color: var(--orange);
+  page-break-after: avoid; }
+
+/* ── 표: 얇은 회색 괘선 + 오렌지 헤더 라인 ── */
+table { border-collapse: collapse; width: 100%; margin: 3mm 0 6mm;
+  page-break-inside: avoid; }
+th, td { border: none; border-bottom: 1px solid var(--line);
+  padding: 1.8mm 2.8mm; font-size: 9.5pt; }
+tr:first-child th { border-top: 2px solid var(--orange); }
+th { background: var(--orange-pale); font-weight: 600; text-align: left; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .tree td, .tree th { text-align: right; font-size: 8.5pt; padding: 1.2mm 1.8mm; }
-.cover { text-align: center; padding-top: 55mm; page-break-after: always; }
-.cover .title { font-size: 24pt; font-weight: 700; margin-bottom: 12mm; }
-.cover .subject { font-size: 13pt; margin: 3mm 0; }
-.cover .fictional {
-  display: inline-block; margin-top: 18mm; padding: 3mm 8mm;
-  border: 2px solid #b03030; color: #b03030; font-weight: 700; font-size: 12pt;
-}
-.cover .disclaimer { margin-top: 25mm; font-size: 9pt; color: #555;
-  text-align: left; border: 1px solid #ccc; padding: 4mm; }
-.toc { page-break-after: always; }
-.toc ol { line-height: 2.1; }
-.chapter { page-break-before: always; }
+
 .passfail-pass { color: #1a7a2e; font-weight: 700; }
 .passfail-fail { color: #b03030; font-weight: 700; }
-.note { font-size: 9pt; color: #555; }
-.formula { background: #f5f6fa; border: 1px solid #d8dce6; padding: 3mm 5mm;
-  font-family: Consolas, monospace; font-size: 9.5pt; margin: 3mm 0; }
-ul.limits li { margin-bottom: 2mm; }
+.note { font-size: 8.5pt; color: var(--gray); }
+.formula { background: #faf7f4; border-left: 3.5px solid var(--orange-bright);
+  padding: 3mm 5mm; font-family: Consolas, monospace; font-size: 9.5pt; margin: 3mm 0; }
+ul, ol { padding-left: 5.5mm; }
+ul.limits li { margin-bottom: 2.5mm; }
+ul li::marker { color: var(--orange-bright); }
 """
 
 
@@ -228,32 +279,41 @@ def build_report_html(contract: dict, result: dict) -> str:
 <body>
 
 <div class="cover">
-  <div class="title">파생상품(콜옵션)<br>가치평가보고서</div>
-  <div class="subject">평가대상: {esc(u['issuer'])} {esc(u['security_type'])}에 대한 콜옵션</div>
-  <div class="subject">평가기준일: {esc(vi['valuation_date'])}</div>
-  <div class="subject">보고서 작성일: {today}</div>
-  {fictional_banner}
-  <div class="disclaimer">
-    본 보고서 및 평가결과는 평가기준일 현재, 본 보고서에 기술된 특정 목적만을 위하여 타당하다.
-    본 보고서는 기술된 목적 외의 용도나 제3자의 어떠한 목적으로도 이용될 수 없으며, 어떠한
-    형태로든 투자자문이 아니고 그렇게 해석되어서도 안 된다. 본 보고서의 어떠한 부분도 평가자의
-    서면동의 없이 공중에 전파될 수 없다.
+  <div class="brand"><span class="bar"></span>Binomial Valuation Engine</div>
+  <div class="mid">
+    <div class="label">파생상품 가치평가 의견서</div>
+    <div class="title">{esc(u['issuer'])}<br>콜옵션 가치평가보고서</div>
+    <div class="subject">평가대상: {esc(u['issuer'])} {esc(u['security_type'])}에 대한 콜옵션<br>
+    평가기준일: {esc(vi['valuation_date'])}</div>
+  </div>
+  <div class="bottom">
+    <div class="date">{today}</div>
+    {fictional_banner}
+    <div class="disclaimer">
+      본 보고서 및 평가결과는 평가기준일 현재, 본 보고서에 기술된 특정 목적만을 위하여 타당하다.
+      본 보고서는 기술된 목적 외의 용도나 제3자의 어떠한 목적으로도 이용될 수 없으며, 어떠한
+      형태로든 투자자문이 아니고 그렇게 해석되어서도 안 된다. 본 보고서의 어떠한 부분도 평가자의
+      서면동의 없이 공중에 전파될 수 없다.
+    </div>
   </div>
 </div>
 
 <div class="toc">
-  <h1>목 차</h1>
+  <div class="toc-title">목 차</div>
   <ol>
-    <li>제1장 Executive Summary
+    <li>Executive Summary
       <ol><li>가치평가방법</li><li>평가대상 거래 정보</li><li>평가결과</li><li>주요변수 및 가정</li></ol></li>
-    <li>제2장 용역의 목적, 범위 및 한계
+    <li>용역의 목적, 범위 및 한계
       <ol><li>용역의 목적</li><li>용역의 범위 및 수행절차</li><li>용역의 한계</li></ol></li>
-    <li>제3장 파생상품 가치평가
+    <li>파생상품 가치평가
       <ol><li>개요</li><li>CRR모형 가치평가방법</li><li>거래 조건</li><li>평가결과</li></ol></li>
   </ol>
 </div>
 
-<h2>제1장 Executive Summary</h2>
+<div class="chapter-head">
+  <div class="chapter-num">01</div>
+  <div class="chapter-title">Executive Summary</div>
+</div>
 
 <h3>1. 가치평가방법</h3>
 <p>본 평가는 Cox-Ross-Rubinstein(1979) 이항모형(이하 "CRR모형")을 적용하여 콜옵션의
@@ -293,7 +353,12 @@ def build_report_html(contract: dict, result: dict) -> str:
   <tr><td>배당수익률</td><td class='num'>{pct(vi['dividend_yield'])}</td><td>기초자산 배당 정책 반영</td></tr>
 </table>
 
-<h2 class="chapter">제2장 용역의 목적, 범위 및 한계</h2>
+<div class="chapter">
+<div class="chapter-head">
+  <div class="chapter-num">02</div>
+  <div class="chapter-title">용역의 목적, 범위 및 한계</div>
+</div>
+</div>
 
 <h3>1. 용역의 목적</h3>
 <p>본 용역의 목적은 평가기준일({esc(vi['valuation_date'])}) 현재
@@ -324,7 +389,13 @@ def build_report_html(contract: dict, result: dict) -> str:
   <li>본 보고서의 어떠한 부분도 평가자의 서면동의 및 승인 없이 공중에 전파될 수 없다.</li>
 </ul>
 
-<h2 class="chapter">제3장 파생상품 가치평가</h2>
+<div class="chapter">
+<div class="chapter-head">
+  <div class="chapter-num">03</div>
+  <div class="chapter-title">파생상품 가치평가<br>
+    <span class="chapter-sub">{esc(u['issuer'])} 보통주 콜옵션 — CRR 이항모형</span></div>
+</div>
+</div>
 
 <h3>1. 개요</h3>
 <p>평가대상은 {esc(u['issuer'])} {esc(u['security_type'])}를 기초자산으로 하는
