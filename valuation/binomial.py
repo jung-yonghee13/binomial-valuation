@@ -128,6 +128,64 @@ def price(params: BinomialParams, payoff: Payoff, american: bool = False) -> flo
     return float(v[0])
 
 
+def price_with_curve(
+    s0: float,
+    sigma: float,
+    step_years: float,
+    step_rates: np.ndarray,
+    payoff: Payoff,
+    american: bool = False,
+) -> float:
+    """기간구조(스텝별 선도이자율)를 반영한 CRR 이항모형 가치평가.
+
+    price()가 무위험이자율을 하나로 고정하는 것과 달리, 이 함수는
+    수익률곡선에서 도출한 스텝별 선도이자율(step_rates, 단리)을 받아
+    매 스텝의 위험중립확률과 할인율을 다르게 적용한다 (실무 평가모델 방식).
+
+    s0         : 현재 기초자산 가격
+    sigma      : 연환산 변동성
+    step_years : 한 스텝의 길이(년). 예: 주 단위 트리는 7/365
+    step_rates : 길이 = 스텝 수인 단리 선도이자율 배열
+                 (risk_free.step_forward_rates()로 산출)
+
+    [일관성 개선]
+    스텝 i의 성장배수 g_i = 1 + f_i 를 위험중립확률과 할인 양쪽에
+    동일하게 사용한다: q_i = (g_i - d)/(u - d), 할인계수 = 1/g_i.
+    (확률은 (1+f)로 만들고 할인만 exp(-f)로 하는 혼용을 피한다)
+    """
+    rates = np.asarray(step_rates, dtype=float)
+    steps = len(rates)
+    if s0 <= 0 or sigma <= 0 or step_years <= 0:
+        raise ValueError("s0, sigma, step_years는 양수여야 합니다.")
+    if steps < 1:
+        raise ValueError("step_rates가 비어 있습니다.")
+
+    # 상승/하락배수는 변동성만으로 결정된다 (전체 스텝 공통 → 트리 재결합 유지)
+    u = float(np.exp(sigma * np.sqrt(step_years)))
+    d = 1.0 / u
+
+    # 스텝별 성장배수와 위험중립확률 — 무차익거래 조건을 스텝마다 검증
+    growth = 1.0 + rates
+    if not np.all((d < growth) & (growth < u)):
+        raise ValueError(
+            "무차익거래 조건 위반: 일부 스텝에서 위험중립확률이 (0, 1)을 벗어납니다."
+        )
+    q = (growth - d) / (u - d)
+
+    # 만기 시점 주가 배열에서 출발해 역방향 귀납 (price()와 동일한 방식)
+    j = np.arange(steps + 1)
+    s = s0 * u**j * d ** (steps - j)
+    v = np.asarray(payoff(s), dtype=float)
+
+    for i in range(steps - 1, -1, -1):  # 스텝 i의 이자율은 t_i -> t_{i+1} 구간에 적용
+        s = s[1:] * d
+        v = (q[i] * v[1:] + (1.0 - q[i]) * v[:-1]) / growth[i]
+        if american:
+            v = np.maximum(v, payoff(s))
+
+    return float(v[0])
+
+
 def build_trees(
     params: BinomialParams, payoff: Payoff, american: bool = False
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:

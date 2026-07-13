@@ -84,6 +84,39 @@ def spot_rate(
     return float(np.interp(target_maturity, grid, spots))
 
 
+def step_forward_rates(
+    maturities, par_yields, step_years: float, steps: int, freq: int = COUPON_FREQ
+) -> np.ndarray:
+    """트리 스텝별 선도이자율(단리)을 산출한다 — 기간구조 반영 트리용.
+
+    [왜 선도이자율인가]
+    무위험이자율을 하나의 값으로 고정하지 않고, 수익률곡선의 기간구조를
+    트리의 매 스텝에 반영하는 실무 방식이다. 스텝 i의 선도이자율은
+    "시점 t_{i-1}에서 t_i까지 한 구간에 적용되는 시장이 내재한 이자율"로,
+    할인계수(DF)의 비율에서 도출된다:
+
+        1 + f_i = DF(t_{i-1}) / DF(t_i),   DF(t) = exp(-spot(t) · t)
+
+    반환: 길이 steps의 단리 선도이자율 배열 (스텝당).
+    트리에서 스텝별 위험중립확률·할인에 일관되게 사용한다.
+    """
+    if step_years <= 0 or steps < 1:
+        raise ValueError("step_years는 양수, steps는 1 이상이어야 합니다.")
+
+    grid, spots = bootstrap_spot_curve(maturities, par_yields, freq)
+
+    # 각 스텝 경계 시점의 연속복리 spot rate (그리드 보간, 범위 밖은 끝값)
+    t = np.arange(steps + 1) * step_years  # t_0=0, t_1, ..., t_steps
+    spot_t = np.interp(t, grid, spots)
+
+    # 할인계수 DF(t) = exp(-spot·t); DF(0) = 1
+    df = np.exp(-spot_t * t)
+
+    # 선도이자율(단리): 1 + f_i = DF(t_{i-1}) / DF(t_i)
+    forwards = df[:-1] / df[1:] - 1.0
+    return forwards
+
+
 def load_ytm_curve(path) -> dict:
     """JSON 파일에서 국고채 수익률 곡선을 로드한다.
 
