@@ -18,20 +18,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import date, datetime
 from pathlib import Path
 
 import numpy as np
 
-from valuation import monte_carlo, payoffs, risk_free, volatility
+from valuation import monte_carlo, payoffs, risk_free, seibro, volatility
 from valuation.binomial import BinomialParams, price, price_with_curve
 
 DAYS_PER_YEAR = 365.0  # 잔존만기 연 환산 기준 (ACT/365: 실제 일수 ÷ 365)
 
 
 def load_json(path) -> dict:
-    """UTF-8 JSON 파일을 읽어 dict로 반환한다."""
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    """UTF-8 JSON 파일을 읽어 dict로 반환한다 (윈도우 BOM 허용)."""
+    return json.loads(Path(path).read_text(encoding="utf-8-sig"))
 
 
 def years_between(start: str, end: str) -> float:
@@ -86,13 +87,13 @@ def resolve_risk_free(inputs: dict, maturity_years: float) -> dict:
     if value != "auto":
         raise ValueError("risk_free_rate는 숫자 또는 'auto'여야 합니다.")
 
+    # 곡선 확보 우선순위: ① 지정된 곡선 파일 ② Seibro 무료 조회 자동 수집
     est = inputs.get("risk_free_estimation", {})
     curve_file = est.get("ytm_curve_file")
     if curve_file:
         curve = risk_free.load_ytm_curve(curve_file)
     else:
-        # KOFIA 자동 수집은 미구현 → 안내 메시지와 함께 예외 발생
-        curve = risk_free.fetch_kofia_ytm(inputs["inputs"]["valuation_date"])
+        curve = seibro.fetch_treasury_curve(inputs["inputs"]["valuation_date"])
 
     rate = risk_free.spot_rate(curve["maturities"], curve["yields"], maturity_years)
     return {

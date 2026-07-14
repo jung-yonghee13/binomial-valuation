@@ -123,7 +123,7 @@ def load_ytm_curve(path) -> dict:
     파일 형식 (data/sample_ytm_curve.json 참조):
         {"date": "YYYY-MM-DD", "maturities": [0.25, 0.5, ...], "yields": [0.0245, ...]}
     """
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = json.loads(Path(path).read_text(encoding="utf-8-sig"))  # 윈도우 BOM 허용
     for key in ("maturities", "yields"):
         if key not in data:
             raise ValueError(f"수익률 곡선 파일에 '{key}' 항목이 없습니다: {path}")
