@@ -31,11 +31,12 @@ st.markdown(
     <style>
     .stApp { background: #F7F1EA; }
     header[data-testid="stHeader"] { background: transparent; }
+    .block-container { padding-top: 1.1rem; }
 
     .brand-title {
         color: #E8490F; font-size: 2.3rem; font-weight: 800;
-        letter-spacing: 0.02em; line-height: 1.1; margin: 0.2rem 0 0.3rem 0;
-        text-transform: lowercase; text-align: center;
+        letter-spacing: -0.01em; line-height: 1.1; margin: 0 0 0.3rem 0;
+        text-align: center;
     }
     .brand-sub { color: #6b6257; font-size: 0.92rem; margin-bottom: 0.6rem;
         text-align: center; }
@@ -80,7 +81,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.markdown('<div class="brand-title">binomial valuation engine</div>', unsafe_allow_html=True)
+st.markdown('<div class="brand-title">이항모형 가치평가 엔진</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="brand-sub">계약조건과 피어그룹만 입력하면 — 변동성·무위험이자율 자동 수집 → '
     "CRR 이항모형 평가 → 몬테카를로 교차검증 → PDF 평가보고서까지 자동 수행합니다.</div>",

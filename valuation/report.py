@@ -67,8 +67,8 @@ body {
   background: var(--orange-bright); margin-right: 3mm; vertical-align: middle; }
 .cover .mid { margin-top: 70mm; }
 .cover .label { font-size: 11.5pt; font-weight: 700; margin-bottom: 5mm; }
-.cover .title { font-size: 27pt; line-height: 1.35; font-weight: 700;
-  font-family: 'Batang', '바탕', Georgia, serif; }
+.cover .title { font-size: 27pt; line-height: 1.35; font-weight: 800;
+  font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; letter-spacing: -0.01em; }
 .cover .subject { font-size: 11pt; margin-top: 8mm; color: #3a3a3a; }
 .cover .bottom { margin-top: auto; }
 .cover .date { font-size: 11pt; font-weight: 600; margin-bottom: 6mm; }
@@ -82,10 +82,10 @@ body {
 
 /* ── 목차 ── */
 .toc { page-break-after: always; padding-top: 10mm; }
-.toc .toc-title { font-size: 20pt; font-weight: 700; margin-bottom: 12mm;
-  font-family: 'Batang', '바탕', Georgia, serif; }
+.toc .toc-title { font-size: 20pt; font-weight: 800; margin-bottom: 12mm;
+  font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; }
 .toc ol { line-height: 2.2; font-size: 10.5pt; }
-.toc > ol > li { font-weight: 700; margin-bottom: 3mm; }
+.toc > ol > li { font-weight: 800; margin-bottom: 3mm; font-size: 11pt; }
 .toc ol ol { font-weight: 400; font-size: 10pt; color: #444; }
 
 /* ── 챕터 헤드: 큰 오렌지 번호 + 명조 제목 ── */
@@ -94,14 +94,15 @@ body {
   margin: 4mm 0 9mm; page-break-after: avoid; }
 .chapter-num { font-size: 38pt; font-weight: 700; line-height: 1;
   color: var(--orange-bright); letter-spacing: -0.02em; }
-.chapter-title { font-size: 17pt; font-weight: 700; line-height: 1.35;
-  font-family: 'Batang', '바탕', Georgia, serif; padding-top: 2mm; }
+.chapter-title { font-size: 17pt; font-weight: 800; line-height: 1.35;
+  font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; padding-top: 2mm;
+  letter-spacing: -0.01em; }
 .chapter-sub { font-size: 10.5pt; font-weight: 700; color: var(--ink); }
 
 h3 { font-size: 11.5pt; margin: 8mm 0 3mm; page-break-after: avoid;
-  border-left: 3.5px solid var(--orange-bright); padding-left: 3mm; }
+  font-weight: 800; border-left: 3.5px solid var(--orange-bright); padding-left: 3mm; }
 h4 { font-size: 10.5pt; margin: 6mm 0 2.5mm; color: var(--orange);
-  page-break-after: avoid; }
+  font-weight: 800; page-break-after: avoid; }
 
 /* ── 표: 얇은 회색 괘선 + 오렌지 헤더 라인 ── */
 table { border-collapse: collapse; width: 100%; margin: 3mm 0 6mm;
@@ -496,9 +497,9 @@ def generate_report(
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # 파일명은 URL 인코딩 문제가 없도록 영문 사용 (발행회사명 등은 보고서 본문에 표기)
     valuation_date = result["valuation_inputs"]["valuation_date"]
-    issuer = contract["underlying"]["issuer"].replace(" ", "")
-    stem = f"평가보고서_{valuation_date}_{issuer}"
+    stem = f"valuation-report_{valuation_date}"
 
     html_path = out_dir / f"{stem}.html"
     html_path.write_text(build_report_html(contract, result), encoding="utf-8")

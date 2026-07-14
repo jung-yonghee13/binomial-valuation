@@ -122,7 +122,7 @@ class TestGenerateReport:
         contract_path, result_path, out_dir = io_paths
         out = generate_report(contract_path, result_path, out_dir, html_only=True)
         assert out.suffix == ".html"
-        assert "평가보고서_2026-06-30" in out.name
+        assert "valuation-report_2026-06-30" in out.name
         assert "2,594.26" in out.read_text(encoding="utf-8")
 
     @pytest.mark.skipif(find_browser() is None, reason="Edge/Chrome 미설치")
