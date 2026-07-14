@@ -1,4 +1,4 @@
-"""평가보고서 PDF 생성 파이프라인.
+﻿"""평가보고서 PDF 생성 파이프라인.
 
 run_valuation.py가 산출한 결과 JSON과 계약정보 JSON을 입력받아
 보고서 목차 구조의 HTML을 생성하고, Edge/Chrome headless 인쇄로 PDF 변환한다.
@@ -18,6 +18,8 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
+import shutil
 import subprocess
 from datetime import date
 from pathlib import Path
@@ -29,12 +31,15 @@ from valuation.binomial import BinomialParams, build_trees
 
 EXAMPLE_TREE_STEPS = 5
 
+# PDF 변환에 쓸 브라우저 후보 (윈도우 로컬 / 리눅스 배포 환경 모두 대응)
 BROWSER_CANDIDATES = [
     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
 ]
+# 리눅스(Streamlit Cloud 등)에서는 PATH에서 찾는다 (packages.txt로 chromium 설치)
+BROWSER_COMMANDS = ["chromium", "chromium-browser", "google-chrome", "msedge"]
 
 # 삼일PwC 리서치 문서 톤의 스타일: 오렌지 포인트 컬러, 명조체 대제목,
 # 그라데이션 표지, 큰 오렌지 챕터 번호(01·02·03), 산세리프 본문과 넉넉한 여백
@@ -51,10 +56,10 @@ CSS = """
   --line: #d9d9d9;
 }
 body {
-  font-family: 'Malgun Gothic', '맑은 고딕', sans-serif;
+  font-family: 'Malgun Gothic', '맑은 고딕', 'NanumGothic', 'Noto Sans CJK KR', 'Noto Sans KR', sans-serif;
   font-size: 10pt; line-height: 1.7; color: var(--ink); margin: 0;
 }
-.serif { font-family: 'Batang', '바탕', 'Noto Serif KR', Georgia, serif; }
+.serif { font-family: 'Batang', '바탕', 'NanumMyeongjo', 'Noto Serif CJK KR', Georgia, serif; }
 
 /* ── 표지: 화이트 → 피치 그라데이션, 명조 대제목 ── */
 .cover {
@@ -68,7 +73,7 @@ body {
 .cover .mid { margin-top: 70mm; }
 .cover .label { font-size: 11.5pt; font-weight: 700; margin-bottom: 5mm; }
 .cover .title { font-size: 27pt; line-height: 1.35; font-weight: 800;
-  font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; letter-spacing: -0.01em; }
+  font-family: 'Malgun Gothic', '맑은 고딕', 'NanumGothic', 'Noto Sans CJK KR', 'Noto Sans KR', sans-serif; letter-spacing: -0.01em; }
 .cover .subject { font-size: 11pt; margin-top: 8mm; color: #3a3a3a; }
 .cover .bottom { margin-top: auto; }
 .cover .date { font-size: 11pt; font-weight: 600; margin-bottom: 6mm; }
@@ -83,7 +88,7 @@ body {
 /* ── 목차 ── */
 .toc { page-break-after: always; padding-top: 10mm; }
 .toc .toc-title { font-size: 20pt; font-weight: 800; margin-bottom: 12mm;
-  font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; }
+  font-family: 'Malgun Gothic', '맑은 고딕', 'NanumGothic', 'Noto Sans CJK KR', 'Noto Sans KR', sans-serif; }
 .toc ol { line-height: 2.2; font-size: 10.5pt; }
 .toc > ol > li { font-weight: 800; margin-bottom: 3mm; font-size: 11pt; }
 .toc ol ol { font-weight: 400; font-size: 10pt; color: #444; }
@@ -95,7 +100,7 @@ body {
 .chapter-num { font-size: 38pt; font-weight: 700; line-height: 1;
   color: var(--orange-bright); letter-spacing: -0.02em; }
 .chapter-title { font-size: 17pt; font-weight: 800; line-height: 1.35;
-  font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; padding-top: 2mm;
+  font-family: 'Malgun Gothic', '맑은 고딕', 'NanumGothic', 'Noto Sans CJK KR', 'Noto Sans KR', sans-serif; padding-top: 2mm;
   letter-spacing: -0.01em; }
 .chapter-sub { font-size: 10.5pt; font-weight: 700; color: var(--ink); }
 
@@ -455,10 +460,14 @@ q = (exp((r−δ)·Δt) − d) / (u − d)<br>
 
 
 def find_browser() -> str | None:
-    """PDF 변환에 사용할 Edge/Chrome 실행 파일을 찾는다."""
-    for candidate in BROWSER_CANDIDATES:
+    """PDF 변환에 사용할 Edge/Chrome/Chromium 실행 파일을 찾는다."""
+    for candidate in BROWSER_CANDIDATES:  # 윈도우 고정 경로
         if Path(candidate).exists():
             return candidate
+    for command in BROWSER_COMMANDS:  # PATH 탐색 (리눅스 배포 환경)
+        found = shutil.which(command)
+        if found:
+            return found
     return None
 
 
@@ -470,19 +479,18 @@ def html_to_pdf(html_path: Path, pdf_path: Path) -> None:
             "PDF 변환에 사용할 Edge 또는 Chrome을 찾지 못했습니다. "
             f"HTML 보고서는 생성되었습니다: {html_path}"
         )
-    subprocess.run(
-        [
-            browser,
-            "--headless",
-            "--disable-gpu",
-            "--no-pdf-header-footer",
-            f"--print-to-pdf={pdf_path.resolve()}",
-            html_path.resolve().as_uri(),
-        ],
-        check=True,
-        timeout=120,
-        capture_output=True,
-    )
+    args = [
+        browser,
+        "--headless",
+        "--disable-gpu",
+        "--no-pdf-header-footer",
+        f"--print-to-pdf={pdf_path.resolve()}",
+        html_path.resolve().as_uri(),
+    ]
+    if os.name != "nt":
+        # 컨테이너(배포 환경)에서는 샌드박스를 비활성화해야 chromium이 기동된다
+        args[1:1] = ["--no-sandbox", "--disable-dev-shm-usage"]
+    subprocess.run(args, check=True, timeout=120, capture_output=True)
     if not pdf_path.exists():
         raise RuntimeError("PDF 파일이 생성되지 않았습니다.")
 

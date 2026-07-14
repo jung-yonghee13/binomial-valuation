@@ -3,11 +3,11 @@ numpy
 pandas
 scipy
 
-# 테스트
-pytest
-
 # 시세 수집 (변동성 자동 산출)
 finance-datareader
 
 # 대시보드
 streamlit
+
+# 테스트 (배포에는 불필요하나 개발 환경 재현용)
+pytest

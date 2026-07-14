@@ -1,0 +1,3 @@
+chromium
+fonts-nanum
+fonts-noto-cjk
