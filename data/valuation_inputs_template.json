@@ -45,7 +45,7 @@
   },
   "estimation_basis": {
     "underlying_price_krw": "추정 근거 기재 (예: 최근 유상증자 발행가, 본질가치 평가액 등)",
-    "risk_free_rate": "자동 산출 — 평가기준일 KOFIA 국고채 spot rate (산출 내역 자동 기록)",
+    "risk_free_rate": "자동 산출 — 평가기준일 국고채 수익률(Seibro) 기반 spot rate·선도이자율 (산출 내역 자동 기록)",
     "volatility": "자동 산출 — 피어그룹 5개사 역사적 변동성 평균 (피어별 내역 자동 기록)"
   }
 }

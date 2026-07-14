@@ -78,7 +78,7 @@ def resolve_risk_free(inputs: dict, maturity_years: float) -> dict:
 
     - 숫자면: 연속복리 기준 값으로 간주하고 그대로 사용
     - "auto"면: 국고채 수익률 곡선에서 잔존만기 대응 spot rate를 산출
-      (곡선은 ytm_curve_file로 지정한 JSON에서 로드, 없으면 KOFIA 수집 시도)
+      (곡선은 ytm_curve_file로 지정한 JSON에서 로드, 없으면 Seibro에서 자동 수집)
     """
     value = inputs["inputs"]["risk_free_rate"]
     if isinstance(value, (int, float)):

@@ -1,8 +1,9 @@
 """국고채 수익률 기반 무위험이자율(spot rate) 산출.
 
 [이 파일이 하는 일]
-KOFIA 채권정보센터 등에서 확인한 "만기별 국고채 수익률(YTM)"에서
-평가에 실제로 써야 하는 "spot rate(현물이자율)"를 만들어 낸다.
+"만기별 국고채 수익률(YTM)" 곡선에서 평가에 실제로 써야 하는
+"spot rate(현물이자율)"와 트리 스텝별 "선도이자율"을 만들어 낸다.
+수익률 곡선 자체의 수집은 valuation/seibro.py가 담당한다 (관심사 분리).
 
 [왜 YTM을 그대로 쓰지 않고 spot rate를 쓰는가]
 고시되는 국고채 수익률(YTM)은 "중간에 이자를 받는 이표채"의 수익률이라
@@ -10,11 +11,12 @@ KOFIA 채권정보센터 등에서 확인한 "만기별 국고채 수익률(YTM)
 현금흐름이 있는 순수한 할인율" = spot rate가 이론적으로 맞다.
 
 [산출 절차]
-1. 만기별 YTM 곡선 확보 (수동 JSON 입력 또는 추후 KOFIA 자동 수집)
+1. 만기별 YTM 곡선 확보 (seibro.fetch_treasury_curve() 자동 수집 또는 load_ytm_curve())
 2. 부트스트래핑: 짧은 만기부터 차례로 "이표의 현재가치를 걷어내고"
    순수 할인계수(discount factor)를 역산한다
 3. 평가대상의 잔존만기에 해당하는 spot rate를 보간으로 선택
 4. 연속복리로 환산해서 반환 → 트리 엔진(binomial.py)의 복리 기준과 일치
+5. (기간구조 모드) step_forward_rates()로 트리 스텝별 선도이자율 도출
 
 주의: 수익률은 소수로 표기한다 (3% -> 0.03). 퍼센트 숫자를 넣으면 예외 발생.
 """
@@ -132,16 +134,3 @@ def load_ytm_curve(path) -> dict:
     return data
 
 
-def fetch_kofia_ytm(date) -> dict:
-    """KOFIA 국고채 수익률 자동 수집 — 파이썬 직접 수집은 지원하지 않는다.
-
-    KOFIA BIS는 공식 REST API가 없다. 자동 수집은 에이전트가 Chrome 브라우저로
-    페이지를 열어 값을 읽는 방식으로 수행한다
-    (.claude/skills/valuation-report/SKILL.md 의 2-B-a 절차 참조).
-    에이전트가 수집 결과를 ytm_curve JSON으로 저장하면 load_ytm_curve()로 투입된다.
-    """
-    raise NotImplementedError(
-        "KOFIA 수익률은 브라우저 수집 절차로 가져옵니다 (SKILL.md 2-B-a). "
-        "수집된 곡선 JSON을 입력 파일의 risk_free_estimation.ytm_curve_file 로 "
-        "지정하세요. (수동 입력 폴백도 동일 형식)"
-    )

@@ -191,7 +191,7 @@ def _risk_free_rows(rf: dict) -> str:
     return f"""
     <h3>무위험이자율 산출 내역</h3>
     <p>기준 수익률 곡선 (기준일: {esc(detail.get('curve_date', '-'))},
-       출처: {esc(detail.get('curve_source') or 'KOFIA 채권정보센터')}) 에서
+       출처: {esc(detail.get('curve_source') or 'Seibro 채권만기수익률')}) 에서
        부트스트래핑으로 spot rate 곡선을 산출하고, 잔존만기
        {detail['target_maturity_years']:.4f}년에 보간한 뒤 연속복리로 환산하였다.
        적용 무위험이자율: <b>{pct(rf['value'], 4)}</b> (연속복리)</p>
