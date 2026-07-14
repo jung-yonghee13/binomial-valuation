@@ -31,7 +31,7 @@
   },
   "risk_free_estimation": {
     "method": "국고채 만기별 YTM → 부트스트래핑으로 spot rate 곡선 산출 → 잔존만기 보간 → 연속복리 환산",
-    "data_source": "금융투자협회 채권정보센터 (https://www.kofiabond.or.kr) — 브라우저 수집 (SKILL.md 2-B-a)",
+    "data_source": "Seibro 채권만기수익률 자동 수집 (기본, valuation/seibro.py) — 폴백: KOFIA 브라우저 수집(SKILL.md 2-B-a) 또는 ytm_curve_file 수동 지정",
     "interpolation": "linear",
     "discounting": "term_structure",
     "ytm_curve_file": null

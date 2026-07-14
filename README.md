@@ -41,7 +41,7 @@ flowchart LR
 | 데이터 | 수집 방식 | 구현 위치 |
 |--------|-----------|-----------|
 | 피어그룹 주가 (변동성 산출용) | **API 연동** — FinanceDataReader로 KRX 일별 종가를 자동 수집 (5개사 1년치 약 4초) | `valuation/volatility.py` |
-| 국고채 수익률 (무위험이자율용) | **브라우저 자동화** — 공식 API가 없는 KOFIA 채권정보센터를 에이전트가 Chrome으로 직접 열어 값을 읽고 JSON으로 저장 | 스킬 2-B-a 절차 |
+| 국고채 수익률 (무위험이자율용) | **무료 공개 데이터 직접 호출** — Seibro(한국예탁결제원) 채권만기수익률을 HTTP 요청으로 자동 수집 (API 키·브라우저·토큰 불필요, 휴일 자동 소급). KOFIA는 WAF가 스크립트를 차단하여 에이전트 **브라우저 자동화**를 폴백으로 유지 | `valuation/seibro.py` / 스킬 2-B-a(폴백) |
 | 계약 조건 | 정형 JSON 입력 (향후 계약서 문서에서 **정보 추출**로 자동화 예정) | `data/*.json` |
 
 **2. 계산 계층 (Deterministic Computation)** — 모듈들이 데이터 계약(JSON)으로 연결된 파이프라인입니다.
@@ -203,7 +203,7 @@ call_value = price(params, payoff=lambda s: np.maximum(s - 100, 0), american=Tru
 - [x] **변동성 자동 산출**: 피어그룹(대용기업 5개사)의 영업일 기준 주가 데이터를 API로 수집하여 각 사의 역사적 변동성(일별 로그수익률 표준편차의 연환산)을 계산하고 평균하여 기초자산 변동성으로 사용
 - [x] **무위험이자율 자동 산출**: 국고채 수익률 곡선에서 spot rate를 부트스트래핑하고 잔존만기에 보간하여 무위험이자율로 사용 (연속복리 환산). 단, KOFIA 채권정보센터 자동 수집은 미구현 — 수익률 곡선 JSON 수동 입력 폴백으로 동작하며 추후 자동화
 - [x] **기간구조(선도이자율) 반영**: spot rate 곡선에서 스텝별 선도이자율을 도출하여 트리의 위험중립확률·할인율을 스텝마다 다르게 적용 (`risk_free.step_forward_rates`, `binomial.price_with_curve` — 실무 평가모델 방식, 학습 노트: `docs/valuation-logic-notes.md`)
-- [x] **KOFIA 자동 수집**: 채권정보센터 국고채 수익률을 에이전트가 브라우저로 직접 수집하는 절차를 스킬에 정의 (SKILL.md 2-B-a — 공식 API 부재로 브라우저 수집 방식, 수동 입력 폴백 유지)
+- [x] **국고채 수익률 자동 수집**: Seibro(한국예탁결제원) 채권만기수익률 무료 조회를 직접 호출하는 `valuation/seibro.py`로 완전 자동화 (키·브라우저 불필요). KOFIA는 WAF 차단으로 에이전트 브라우저 수집(SKILL.md 2-B-a)을 폴백으로 유지
 - [ ] **입력 자동화**: 그 외 평가 파라미터의 입력 템플릿(JSON/엑셀) 지원
 - [ ] **계약서 분석 에이전트**: 계약서(PDF/문서) 첨부 시 계약정보를 자동 추출·정형화(JSON)하고, 주요변수 자동 산출 → 가치평가 → PDF 보고서까지 전 과정을 자동 수행하는 에이전트로 완성
 - [x] **평가보고서 산출**: 최종 산출물로 평가보고서 자동 생성 — 평가개요·주요 가정·트리 요약·민감도 분석을 포함한 **PDF 보고서** 출력 (`valuation/report.py`, Edge/Chrome headless 인쇄로 한글 폰트 처리)
@@ -224,7 +224,8 @@ call_value = price(params, payoff=lambda s: np.maximum(s - 100, 0), american=Tru
 │   ├── monte_carlo.py                 #   몬테카를로 교차검증 엔진 (추후 LSMC 확장)
 │   ├── payoffs.py                     #   증권별 페이오프 (콜/풋; CB, RCPS 예정)
 │   ├── volatility.py                  #   피어그룹 주가 수집 및 변동성 산출
-│   ├── risk_free.py                   #   국고채 spot rate 부트스트래핑
+│   ├── risk_free.py                   #   국고채 spot rate 부트스트래핑·선도이자율
+│   ├── seibro.py                      #   Seibro 국고채 만기수익률 자동 수집
 │   ├── run_valuation.py               #   평가 실행 진입점 (입력 → 평가 → 교차검증 → 민감도)
 │   └── report.py                      #   평가보고서 생성 (결과 JSON → HTML → PDF)
 ├── docs/
