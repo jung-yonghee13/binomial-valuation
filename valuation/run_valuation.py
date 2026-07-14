@@ -175,7 +175,18 @@ def run(contract: dict, inputs: dict) -> dict:
 
     s0 = float(core["underlying_price_krw"])
     sigma = vol["value"]
-    payoff = payoffs.call(float(core["strike_price_krw"]))
+
+    # 행사가격: 옵션 대가율(연 복리 보장수익률)이 있으면 시점별 스케줄을 만든다
+    #   K(t) = 기준 행사가격 × (1 + 대가율)^t   — 대가율 0이면 고정 행사가격
+    base_strike = float(core["strike_price_krw"])
+    growth_raw = terms.get("strike_growth_rate")
+    strike_growth = 0.0 if growth_raw is None else float(growth_raw)
+    if strike_growth:
+        strikes = payoffs.strike_schedule(base_strike, strike_growth, step_years, steps)
+        payoff = payoffs.call_with_schedule(strikes)
+    else:
+        strikes = None
+        payoff = payoffs.call(base_strike)
 
     # MC 교차검증·보고서용 파라미터 (rf는 만기 대응 spot rate — 유럽형에서는
     # 결정론적 기간구조 하의 할인과 동치이므로 교차검증 기준으로 유효하다)
@@ -220,7 +231,20 @@ def run(contract: dict, inputs: dict) -> dict:
             return price(p, payoff, american=american)
 
     unit_value = pricer(s0, sigma)  # 1주당 가치
-    quantity = int(terms["quantity_shares"])
+
+    # ── 옵션 수량 산정 ──
+    #   콜옵션 수량 = 대상주식수량 × 행사범위 × 행사비율(평가대상 보유분)
+    #   (계약상 전체 주식 중 일부만 콜옵션 대상이고, 그중 일부만 해당 보유자 몫인 구조)
+    total_shares = int(terms["quantity_shares"])
+    # 주의: `x or 1.0`을 쓰면 0이 1로 둔갑하므로 None만 기본값으로 대체한다
+    scope_raw = terms.get("exercise_scope")
+    alloc_raw = terms.get("allocation_ratio")
+    exercise_scope = 1.0 if scope_raw is None else float(scope_raw)
+    allocation_ratio = 1.0 if alloc_raw is None else float(alloc_raw)
+    for label, ratio in (("exercise_scope", exercise_scope), ("allocation_ratio", allocation_ratio)):
+        if not 0 < ratio <= 1:
+            raise ValueError(f"{label}은 0 초과 1 이하의 비율이어야 합니다: {ratio}")
+    quantity = round(total_shares * exercise_scope * allocation_ratio)
 
     # ── 3) 몬테카를로 교차검증 (유럽형 전용, 미국형은 LSMC 구현 전까지 생략) ──
     if american:
@@ -249,7 +273,9 @@ def run(contract: dict, inputs: dict) -> dict:
             "maturity_date": core["maturity_date"],
             "maturity_years": maturity_years,
             "underlying_price_krw": params.s0,
-            "strike_price_krw": float(core["strike_price_krw"]),
+            "strike_price_krw": base_strike,
+            "strike_growth_rate": strike_growth,
+            "strike_at_maturity_krw": float(strikes[-1]) if strikes is not None else base_strike,
             "volatility": vol,
             "risk_free_rate": rf,
             "dividend_yield": dividend_yield,
@@ -261,6 +287,9 @@ def run(contract: dict, inputs: dict) -> dict:
         },
         "results": {
             "unit_value_krw": unit_value,
+            "total_shares": total_shares,
+            "exercise_scope": exercise_scope,
+            "allocation_ratio": allocation_ratio,
             "quantity_shares": quantity,
             "total_value_krw": unit_value * quantity,
         },

@@ -161,14 +161,50 @@ with left:
         c3, c4 = st.columns(2)
         with c3:
             quantity = st.number_input("대상주식수량 (주)", min_value=1,
-                                       value=int(pt.get("quantity_shares", 150000)), step=1000)
+                                       value=int(pt.get("quantity_shares", 150000)), step=1000,
+                                       help="계약상 기초자산 총 주식수 (행사범위·행사비율 적용 전)")
         with c4:
             strike = st.number_input("행사가격 (원/주)", min_value=1.0,
-                                     value=float(pt.get("strike_price_krw", 12500)), step=100.0)
+                                     value=float(pt.get("strike_price_krw", 12500)), step=100.0,
+                                     help="계약금액 기준 행사가격. 옵션 대가율이 있으면 이 값이 기준가가 됩니다.")
 
-    # ── 02 평가 주요변수 ──
+    # ── 02 콜옵션 조건 ──
     with st.container(border=True):
-        st.markdown('### <span class="num">02</span> 평가 주요변수', unsafe_allow_html=True)
+        st.markdown('### <span class="num">02</span> 콜옵션 조건', unsafe_allow_html=True)
+        st.caption("계약서상 행사범위·행사비율·옵션 대가(보장수익률) 조건. "
+                   "콜옵션 수량 = 대상주식수량 × 행사범위 × 행사비율")
+
+        t1, t2, t3 = st.columns(3)
+        with t1:
+            exercise_scope = st.number_input(
+                "행사범위 (%)", 0.01, 100.0,
+                float(pt.get("exercise_scope", 1.0)) * 100, 1.0,
+                help="대상주식 중 콜옵션 행사 대상이 되는 비율 (예: 35%)")
+        with t2:
+            allocation_ratio = st.number_input(
+                "행사비율 (%)", 0.01, 100.0,
+                float(pt.get("allocation_ratio", 1.0)) * 100, 1.0,
+                help="행사 대상 중 평가대상 보유자에게 귀속되는 비율 (예: 40%)")
+        with t3:
+            strike_growth = st.number_input(
+                "옵션 대가율 (연 %, 0=고정)", 0.0, 50.0,
+                float(pt.get("strike_growth_rate", 0.0)) * 100, 0.5,
+                help="행사 시점까지 보장하는 연 수익률. 행사가격이 K(t) = 기준가 × (1+대가율)^t 로 "
+                     "복리 상승합니다. 0이면 만기까지 고정 행사가격.")
+
+        _opt_qty = round(quantity * exercise_scope / 100 * allocation_ratio / 100)
+        _years = max((maturity_date - contract_date).days, 0) / 365
+        _strike_end = strike * (1 + strike_growth / 100) ** _years
+        st.markdown(
+            f"→ **콜옵션 수량 {_opt_qty:,}주** "
+            f"({quantity:,}주 × {exercise_scope:g}% × {allocation_ratio:g}%) · "
+            f"**행사가격 {strike:,.0f}원**"
+            + (f" → 만기 시 {_strike_end:,.0f}원" if strike_growth > 0 else " (만기까지 고정)")
+        )
+
+    # ── 03 평가 주요변수 ──
+    with st.container(border=True):
+        st.markdown('### <span class="num">03</span> 평가 주요변수', unsafe_allow_html=True)
         c5, c6 = st.columns(2)
         with c5:
             valuation_date = st.date_input("평가기준일", date(2026, 6, 30))
@@ -181,7 +217,7 @@ with left:
 
     # ── 03 피어그룹 ──
     with st.container(border=True):
-        st.markdown('### <span class="num">03</span> 피어그룹 — 변동성 자동 산출', unsafe_allow_html=True)
+        st.markdown('### <span class="num">04</span> 피어그룹 — 변동성 자동 산출', unsafe_allow_html=True)
         st.caption("유사 상장기업과 6자리 종목코드를 지정하면 일별 종가를 자동 수집해 연환산 변동성 평균을 계산합니다.")
 
         default_peers = pd.DataFrame(
@@ -205,7 +241,7 @@ with left:
 
     # ── 04 무위험이자율·계산 설정 ──
     with st.container(border=True):
-        st.markdown('### <span class="num">04</span> 무위험이자율 · 계산 설정', unsafe_allow_html=True)
+        st.markdown('### <span class="num">05</span> 무위험이자율 · 계산 설정', unsafe_allow_html=True)
         c7, c8 = st.columns(2)
         with c7:
             rf_mode = st.selectbox("무위험이자율", ["auto", "manual"],
@@ -244,6 +280,9 @@ if run_clicked:
             "exercise_style": exercise_style,
             "quantity_shares": int(quantity),
             "strike_price_krw": float(strike),
+            "exercise_scope": exercise_scope / 100.0,
+            "allocation_ratio": allocation_ratio / 100.0,
+            "strike_growth_rate": strike_growth / 100.0,
             "closing_date": maturity_date.isoformat(),
             "settlement": settlement,
         },
@@ -287,7 +326,7 @@ if run_clicked:
 # ════════════════════════════ 우측: 결과 미리보기 ════════════════════════════
 with right:
     with st.container(border=True):
-        st.markdown('### <span class="num">05</span> 결과 미리보기', unsafe_allow_html=True)
+        st.markdown('### <span class="num">06</span> 결과 미리보기', unsafe_allow_html=True)
 
         if "result" not in st.session_state:
             st.info("좌측에 조건을 입력하고 **가치평가 실행**을 누르면 결과와 보고서 미리보기가 여기에 표시됩니다.")

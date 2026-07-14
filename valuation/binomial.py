@@ -23,9 +23,13 @@ from typing import Callable
 
 import numpy as np
 
+from valuation import payoffs
+
 # 페이오프 함수의 형태: 주가 배열을 받아 행사가치 배열을 돌려준다.
 # 예: 행사가 100인 콜옵션이면 payoff([90, 110]) -> [0, 10]
-Payoff = Callable[[np.ndarray], np.ndarray]
+# 시점별 행사가격 스케줄이 있는 페이오프는 (주가 배열, 시점 인덱스)를 받는다
+# (payoffs.call_with_schedule — 엔진은 payoffs.evaluate()로 자동 판별해 호출한다)
+Payoff = Callable[..., np.ndarray]
 
 
 @dataclass(frozen=True)  # frozen=True: 생성 후 값 변경 불가 → 평가 도중 파라미터가 바뀌는 사고 방지
@@ -111,10 +115,11 @@ def price(params: BinomialParams, payoff: Payoff, american: bool = False) -> flo
     s = params.s0 * params.u ** j * params.d ** (params.steps - j)
 
     # 2) 만기 시점의 옵션가치 = 페이오프 (콜이면 max(S-K, 0))
-    v = np.asarray(payoff(s), dtype=float)
+    #    시점별 행사가격 스케줄(옵션 대가율)이 있으면 해당 시점의 행사가격이 적용된다
+    v = np.asarray(payoffs.evaluate(payoff, s, params.steps), dtype=float)
 
     # 3) 만기 → 현재로 한 스텝씩 역방향 이동
-    for _ in range(params.steps):
+    for step in range(params.steps - 1, -1, -1):
         # 직전 시점의 주가 배열: 배열을 한 칸 줄이며 d를 곱하면 된다 (u·d=1 성질 이용)
         s = s[1:] * params.d
         # 계속보유가치 = [q·(위쪽 자식) + (1-q)·(아래쪽 자식)] × 할인계수
@@ -122,7 +127,7 @@ def price(params: BinomialParams, payoff: Payoff, american: bool = False) -> flo
         v = disc * (params.q * v[1:] + (1.0 - params.q) * v[:-1])
         if american:
             # 미국형: 지금 행사하는 것이 더 유리하면 행사가치로 대체
-            v = np.maximum(v, payoff(s))
+            v = np.maximum(v, payoffs.evaluate(payoff, s, step))
 
     # 배열이 한 칸씩 줄어 마지막에는 원소 1개 = 현재(t=0) 시점의 옵션가치
     return float(v[0])
@@ -178,13 +183,13 @@ def price_with_curve(
     # 만기 시점 주가 배열에서 출발해 역방향 귀납 (price()와 동일한 방식)
     j = np.arange(steps + 1)
     s = s0 * u**j * d ** (steps - j)
-    v = np.asarray(payoff(s), dtype=float)
+    v = np.asarray(payoffs.evaluate(payoff, s, steps), dtype=float)
 
     for i in range(steps - 1, -1, -1):  # 스텝 i의 이자율은 t_i -> t_{i+1} 구간에 적용
         s = s[1:] * d
         v = (q[i] * v[1:] + (1.0 - q[i]) * v[:-1]) / growth[i]
         if american:
-            v = np.maximum(v, payoff(s))
+            v = np.maximum(v, payoffs.evaluate(payoff, s, i))
 
     return float(v[0])
 
@@ -209,7 +214,10 @@ def build_trees(
 
     # ── 행사가치 트리: 각 노드에서 즉시 행사했을 때의 가치 ──
     # (NaN 칸은 페이오프를 거쳐도 NaN으로 유지되어 빈칸으로 남는다)
-    exercise = payoff(stock)
+    # 시점별 행사가격 스케줄이 있으면 열(시점)마다 해당 행사가격을 적용한다
+    exercise = np.full((n + 1, n + 1), np.nan)
+    for t in range(n + 1):
+        exercise[:, t] = payoffs.evaluate(payoff, stock[:, t], t)
 
     # ── 옵션가치 트리: 만기 열에서 출발해 역방향으로 채운다 ──
     value = np.full((n + 1, n + 1), np.nan)

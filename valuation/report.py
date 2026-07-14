@@ -264,6 +264,44 @@ def build_report_html(contract: dict, result: dict) -> str:
     )
     style_label = "유럽형 (만기 시점 일괄 행사)" if vi["exercise_style"] == "european" else "미국형 (기간 중 조기행사 가능)"
 
+    # 구버전 결과 JSON 호환: 단위기간이 기록되지 않았으면 만기/스텝수로 산출
+    step_years = vi.get("step_years") or (vi["maturity_years"] / vi["binomial_steps"])
+    step_days = step_years * 365
+
+    # ── 행사가격 서술: 옵션 대가율(보장수익률)이 있으면 시점별로 상승한다 ──
+    growth = float(vi.get("strike_growth_rate", 0.0) or 0.0)
+    if growth:
+        strike_desc = (f"{krw(vi['strike_price_krw'])} 원 → 만기 시 "
+                       f"{krw(vi.get('strike_at_maturity_krw', vi['strike_price_krw']))} 원")
+        strike_growth_note = (
+            f". 계약상 옵션 대가(보장수익률) 연 {pct(growth)}가 적용되어 행사가격은 "
+            f"K(t) = 기준가 × (1 + {pct(growth)})^t 로 시점에 따라 복리 상승하며, "
+            f"이항트리의 각 시점 노드에 해당 시점의 행사가격을 적용하였다"
+        )
+    else:
+        strike_desc = f"{krw(vi['strike_price_krw'])} 원"
+        strike_growth_note = "상 고정 행사가격으로, 만기까지 변동하지 않는다"
+
+    rf_term_note = (
+        "하였다. 또한 수익률곡선의 기간구조를 반영하기 위하여 현물이자율로부터 "
+        "구간별 선도이자율(forward rate)을 도출하고, 이항트리의 각 스텝에 해당 구간의 "
+        "선도이자율을 적용하여 위험중립확률과 할인을 산정하였다"
+        if vi.get("discounting") == "term_structure"
+        else "하였다"
+    )
+
+    vol_detail = vol.get("detail")
+    if vol_detail:
+        vol_detail_note = (
+            f". 유사 상장기업(대용기업) {len(vol_detail['peers'])}개사의 "
+            f"{vol_detail['period']['start']} ~ {vol_detail['period']['end']} 기간 "
+            f"영업일 기준 일별 종가로부터 로그수익률의 표준편차를 산출하고, "
+            f"연간 영업일수(√{vol_detail['trading_days']})를 적용하여 연 변동성으로 환산한 뒤 "
+            f"산술평균하였다"
+        )
+    else:
+        vol_detail_note = ""
+
     # 보고서 예시용 소규모 트리 (실제 평가는 vi['binomial_steps'] 스텝으로 수행)
     example_params = BinomialParams(
         s0=vi["underlying_price_krw"],
@@ -273,7 +311,15 @@ def build_report_html(contract: dict, result: dict) -> str:
         steps=EXAMPLE_TREE_STEPS,
         dividend_yield=vi["dividend_yield"],
     )
-    payoff = payoffs.call(vi["strike_price_krw"])
+    example_step_years = vi["maturity_years"] / EXAMPLE_TREE_STEPS
+    if growth:
+        payoff = payoffs.call_with_schedule(
+            payoffs.strike_schedule(
+                vi["strike_price_krw"], growth, example_step_years, EXAMPLE_TREE_STEPS
+            )
+        )
+    else:
+        payoff = payoffs.call(vi["strike_price_krw"])
     american = vi["exercise_style"] != "european"
     stock_tree, _, value_tree = build_trees(example_params, payoff, american=american)
 
@@ -333,32 +379,47 @@ def build_report_html(contract: dict, result: dict) -> str:
   <tr><th>투자자 (옵션 보유자)</th><td>{esc(c['investor'])}</td></tr>
   <tr><th>부여자 (거래상대방)</th><td>{esc(c['grantor'])}</td></tr>
   <tr><th>기초자산</th><td>{esc(u['issuer'])} {esc(u['security_type'])} ({esc(u['listing_status'])})</td></tr>
-  <tr><th>대상주식수량</th><td class='num'>{int(terms['quantity_shares']):,} 주</td></tr>
-  <tr><th>행사가격</th><td class='num'>{krw(vi['strike_price_krw'])} 원</td></tr>
+  <tr><th>대상주식수량</th><td class='num'>{r.get('total_shares', terms['quantity_shares']):,} 주</td></tr>
+  <tr><th>행사범위 · 행사비율</th><td class='num'>{pct(r.get('exercise_scope', 1.0))} · {pct(r.get('allocation_ratio', 1.0))}</td></tr>
+  <tr><th>콜옵션 수량</th><td class='num'><b>{r['quantity_shares']:,} 주</b></td></tr>
+  <tr><th>행사가격</th><td class='num'>{strike_desc}</td></tr>
   <tr><th>거래종결일 (만기)</th><td>{esc(vi['maturity_date'])}</td></tr>
   <tr><th>행사방식</th><td>{style_label}</td></tr>
   <tr><th>결제방식</th><td>{esc(terms.get('settlement', '-'))}</td></tr>
 </table>
 
 <h3>3. 평가결과</h3>
-<table style='width: 70%'>
-  <tr><th>콜옵션 1주당 공정가치</th><td class='num'><b>{krw(r['unit_value_krw'], 2)} 원</b></td></tr>
-  <tr><th>총 평가액 ({r['quantity_shares']:,}주)</th><td class='num'><b>{krw(r['total_value_krw'])} 원</b></td></tr>
-  <tr><th>몬테카를로 교차검증</th><td>{'생략' if result['cross_check'].get('skipped') else ('합격' if result['cross_check']['passed'] else '불합격')}</td></tr>
+<table style='width: 78%'>
+  <tr><th style='width: 45%'>콜옵션 1주당 공정가치</th><td class='num'><b>{krw(r['unit_value_krw'], 2)} 원</b></td></tr>
+  <tr><th>콜옵션 수량</th><td class='num'>{r['quantity_shares']:,} 주</td></tr>
+  <tr><th>총 평가액</th><td class='num'><b>{krw(r['total_value_krw'])} 원</b></td></tr>
+  <tr><th>몬테카를로 교차검증</th><td>{'생략' if result['cross_check'].get('skipped') else ('합격 — 이항모형 평가액이 시뮬레이션 신뢰구간 내' if result['cross_check']['passed'] else '불합격')}</td></tr>
 </table>
+<p class="note">총 평가액 = 1주당 공정가치 × 콜옵션 수량
+({r.get('total_shares', 0):,}주 × 행사범위 {pct(r.get('exercise_scope', 1.0))} ×
+행사비율 {pct(r.get('allocation_ratio', 1.0))} = {r['quantity_shares']:,}주)</p>
 
 <h3>4. 주요변수 및 가정</h3>
+<p>본 평가에 적용한 주요변수의 정의와 적용 내역은 다음과 같다. 각 변수의 상세한 산출 근거는
+제3장 및 별첨(산출 내역)에 기술하였다.</p>
 <table>
-  <tr><th>변수</th><th class='num'>적용 값</th><th>산출 근거</th></tr>
-  <tr><td>평가기준일</td><td class='num'>{esc(vi['valuation_date'])}</td><td>평가 계약에 따름</td></tr>
-  <tr><td>기초자산 가액</td><td class='num'>{krw(vi['underlying_price_krw'])} 원</td><td>평가자 추정 투입</td></tr>
-  <tr><td>행사가격</td><td class='num'>{krw(vi['strike_price_krw'])} 원</td><td>계약서</td></tr>
-  <tr><td>잔존만기</td><td class='num'>{vi['maturity_years']:.4f} 년</td><td>평가기준일 ~ 거래종결일 (ACT/365)</td></tr>
-  <tr><td>주가 변동성</td><td class='num'>{pct(vol['value'])}</td><td>{esc(vol['basis'])}</td></tr>
-  <tr><td>무위험이자율</td><td class='num'>{pct(rf['value'], 4)}</td><td>{esc(rf['basis'])}</td></tr>
-  <tr><td>할인 방식</td><td class='num'>{'기간구조' if vi.get('discounting') == 'term_structure' else '단일 금리'}</td>
-      <td>{'수익률곡선에서 도출한 스텝별 선도이자율로 위험중립확률·할인을 매 스텝 적용' if vi.get('discounting') == 'term_structure' else '만기 대응 spot rate를 전체 기간에 적용'}</td></tr>
-  <tr><td>배당수익률</td><td class='num'>{pct(vi['dividend_yield'])}</td><td>기초자산 배당 정책 반영</td></tr>
+  <tr><th style='width: 12%'>구분</th><th style='width: 22%'>내용</th><th>적용 내역</th></tr>
+  <tr><td>S</td><td>기초자산 가액<br><span class="note">Current Stock Price</span></td>
+      <td>{krw(vi['underlying_price_krw'])} 원 — {esc(u['listing_status'])} 주식으로서 평가자가
+          합리적으로 추정한 평가기준일({esc(vi['valuation_date'])}) 현재 1주당 가액</td></tr>
+  <tr><td>X</td><td>행사가격<br><span class="note">Exercise Price</span></td>
+      <td>{strike_desc} — 계약서상 행사가격{strike_growth_note}</td></tr>
+  <tr><td>T</td><td>잔존만기<br><span class="note">Maturity (Yr)</span></td>
+      <td>{vi['maturity_years']:.4f} 년 — 평가기준일부터 거래종결일({esc(vi['maturity_date'])})까지의
+          기간을 실제 일수 기준(ACT/365)으로 환산</td></tr>
+  <tr><td>Rf</td><td>무위험이자율<br><span class="note">Risk Free Rate</span></td>
+      <td>{pct(rf['value'], 4)} (연속복리) — 평가기준일 현재 국고채 만기수익률을 기초로
+          부트스트래핑하여 현물이자율(spot rate) 곡선을 산출하고, 잔존만기에 해당하는 이자율을
+          보간법으로 적용{rf_term_note}</td></tr>
+  <tr><td>D</td><td>배당수익률<br><span class="note">Dividends</span></td>
+      <td>{pct(vi['dividend_yield'])} — {'기초자산의 배당 정책을 반영하여 연속 배당수익률로 적용' if vi['dividend_yield'] > 0 else '평가대상 기초자산은 배당이 없는 것으로 가정'}</td></tr>
+  <tr><td>σ</td><td>주가 변동성<br><span class="note">Volatility</span></td>
+      <td>{pct(vol['value'])} (연환산) — {esc(vol['basis'])}{vol_detail_note}</td></tr>
 </table>
 
 <div class="chapter">
@@ -407,33 +468,100 @@ def build_report_html(contract: dict, result: dict) -> str:
 
 <h3>1. 개요</h3>
 <p>평가대상은 {esc(u['issuer'])} {esc(u['security_type'])}를 기초자산으로 하는
-{style_label} 콜옵션이다. 기초자산이 {esc(u['listing_status'])} 주식이므로 변동성은
-유사 상장기업(피어그룹)의 역사적 변동성을 이용하여 추정하였다.</p>
+{style_label} 콜옵션이다. 본 평가에서는 파생상품의 가치평가를 위하여
+Cox-Ross-Rubinstein Model(이하 "CRR모형")을 사용하였다.</p>
+<p>기초자산이 {esc(u['listing_status'])} 주식인 점을 고려하여, 주가 변동성은 유사 상장기업
+(대용기업)의 역사적 변동성을 이용하여 추정하였으며, 무위험이자율은 평가기준일 현재
+국고채 수익률로부터 산출한 현물이자율(spot rate)을 적용하였다. 평가결과의 신뢰성 확보를
+위하여 동일한 가정 하에서 계산 구조가 상이한 몬테카를로 시뮬레이션으로 교차검증을 수행하였다.</p>
 
 <h3>2. CRR모형 가치평가방법</h3>
-<p>CRR모형은 기초자산 주가가 매 단위기간(Δt)마다 일정 배수로 상승(u)하거나 하락(d)한다고
-가정하고, 위험중립확률(q)로 만기 페이오프의 기대값을 역방향으로 할인하여 현재가치를
-산정한다. 위험중립확률과 할인계수는 동일한 연속복리 기준을 적용하였다.</p>
+
+<h4>2.1 CRR모형 가치평가방법론</h4>
+<p>CRR모형은 Cox, J.C., Ross, S.A. and Rubinstein, M.이 1979년에 제시한 옵션가격결정모형으로,
+블랙-숄즈 모형과 같은 연속시간모형(continuous-time model)이 아니라 이항트리(binomial tree)에서
+단위 시간 간격마다 가능한 주가를 결정하고 옵션가치를 산출하는 이산시간모형(discrete-time model)이다.
+CRR모형으로 파생상품을 평가하는 순서는, 우선 평가기준일로부터 만기일까지의 미래주가를
+이항트리 내 단위 시간 간격마다 차례대로 추정한 후, 만기일로부터 단위 시간 간격마다
+귀납적으로 역산하는 과정인 후방귀납법(backward induction)을 적용하여 추정된 미래 주가에
+옵션의 가치를 계산하는 2단계 절차로 이루어진다.</p>
+<p>이 모형에 의하면 옵션가격은 주가의 상승과 하락의 확률이나 투자자의 위험회피도, 다른 자산가치의
+변동에 관계없이 객관적인 옵션의 가격을 계산해낼 수 있다. 즉, 이 모형은 평가방법이 직관적이며
+다양한 파생상품의 평가에 응용이 가능하다는 장점을 가지고 있다.</p>
+
+<h4>2.2 주가트리의 생성</h4>
+<p>이 모형을 사용하기 위해서는 주가의 미래주가 추정이 필요하다. 이를 계산하기 위해서는
+위험중립확률(Risk Neutral Probability, q)과 위험중립 상승비율(u), 하락비율(d)을 계산하여야 한다.
+주가는 매 단위기간(Δt)마다 u배로 상승하거나 d배로 하락하며, 상승·하락 배수는 기초자산의
+변동성(σ)에 의해 결정된다.</p>
 <div class="formula">
-u = exp(σ·√Δt) = {example_params.u:.6f} (Δt = 잔존만기/스텝수 기준)<br>
-d = 1/u = {example_params.d:.6f}<br>
-q = (exp((r−δ)·Δt) − d) / (u − d)<br>
-할인계수 = exp(−r·Δt)
+u = exp(σ·√Δt) = {example_params.u:.6f}<br>
+d = 1 / u = {example_params.d:.6f}<br>
+q = (a − d) / (u − d),&nbsp;&nbsp; a = 위험중립 성장배수 {'(스텝별 선도이자율 기준)' if vi.get('discounting') == 'term_structure' else '= exp((r − δ)·Δt)'}<br>
+할인계수 = {'1 / (1 + f_i)   (스텝별 선도이자율)' if vi.get('discounting') == 'term_structure' else 'exp(−r·Δt)'}
 </div>
-<p class="note">위 수치는 예시 표시용 {EXAMPLE_TREE_STEPS}스텝 기준이며, 실제 평가에는
-{vi['binomial_steps']:,}스텝을 적용하였다. 스텝 수 증가에 따라 평가액은 Black-Scholes
-해석해에 수렴하며, 본 엔진은 해석해 수렴·풋-콜 패리티 자동 테스트로 상시 검증된다.</p>
+<p>위 수치는 예시 표시용 {EXAMPLE_TREE_STEPS}스텝 기준이며, 실제 평가에는
+{vi['binomial_steps']:,}스텝(단위기간 {step_days:.1f}일)을 적용하였다.
+d = 1/u 로 설정함으로써 상승 후 하락한 노드와 하락 후 상승한 노드의 주가가 일치하여
+트리가 재결합(recombining)하므로, 노드 수가 기간에 대해 선형으로 증가하여 계산 효율이 확보된다.</p>
+
+<h4>2.3 후방귀납법(Backward Induction)에 의한 옵션가치 산출</h4>
+<p>후방귀납법은 만기일로부터 역순대로 시점 및 노드별 산출된 주가에서 파생상품 가치를 계산하는
+과정이다. 시점 t, 노드 j의 주가를 S(t, j)로 표기할 때, 만기 시점 T의 각 노드에서 옵션의 가치는
+행사가격 K에 대하여 max(S(T, j) − K, 0)이다.</p>
+<p>만기 직전 시점 T−1의 노드에서는 투자자가 행사를 할 수도 있지만, 미래의 파생상품 가치가
+더 높다고 판단한다면 행사하지 않고 파생상품을 보유할 수도 있다. 따라서 행사 시 가치와 보유 시
+기대가치를 서로 비교하여 더 높은 가치가 해당 노드의 옵션 가치가 되며, 보유 시 기대가치는
+직후 시점 인접하는 두 노드의 파생상품 가치를 토대로 계산할 수 있다. 즉, 인접한 두 노드의
+파생상품 가치가 각각 위험중립확률로 가중평균된 후 단위기간의 무위험이자율(또는 해당 구간의
+선도이자율)로 할인된 값이 보유 시 기대가치가 된다. 이러한 기대가치와 행사가치 중 큰 금액이
+해당 노드의 파생상품 가치가 된다.</p>
+<div class="formula">
+V(t, j) = max[ 행사가치, 보유가치 ]<br>
+&nbsp;&nbsp;행사가치 = max(S(t, j) − K(t), 0)<br>
+&nbsp;&nbsp;보유가치 = 할인계수 × [ q · V(t+1, j+1) + (1 − q) · V(t+1, j) ]
+</div>
+<p>평가기준일 시점까지 이 과정을 귀납적으로 반복하여 최종적으로 산출되는 t=0 노드의 금액이
+파생상품의 공정가치가 된다.{
+' 유럽형 옵션은 만기에만 행사가 가능하므로 각 노드에서 행사가치와의 비교 없이 보유가치만으로 역산한다.'
+if vi['exercise_style'] == 'european'
+else ' 미국형 옵션은 기간 중 언제든 행사가 가능하므로 모든 노드에서 행사가치와 보유가치를 비교한다.'
+}</p>
+
+<h4>2.4 투입변수</h4>
+<p><b>(1) Node 주기</b><br>
+CRR모형을 적용함에 있어 노드 주기는 {step_days:.1f}일
+({'1주일' if vi.get('step_unit') == 'weekly' else f"잔존만기를 {vi['binomial_steps']:,}등분"})을
+기본적으로 적용하였다. 노드 주기를 짧게 할수록 평가결과는 연속시간모형의 해석해에 수렴한다.</p>
+<p><b>(2) 무위험이자율</b><br>
+무위험이자율은 평가기준일 현재 공시된 국고채 만기수익률을 기초로 산출하였다. 평가기준일 현재
+평가대상의 잔존만기와 동일한 만기가 없는 경우에는 잔존만기에 해당하는 이자율을 보간법으로
+산출하여 적용하였다. 만기수익률(YTM)은 이표 재투자를 전제한 수익률이므로, 이를 그대로 할인율로
+사용하지 않고 부트스트래핑을 통해 현물이자율(spot rate)로 전환하여 적용하였다.
+{'또한 수익률곡선의 기간구조를 반영하기 위하여 현물이자율로부터 구간별 선도이자율(forward rate)을 도출하고, 트리의 각 스텝에 해당 구간의 선도이자율을 적용하였다.' if vi.get('discounting') == 'term_structure' else ''}</p>
+<p><b>(3) 배당률</b><br>
+{'기초자산의 배당수익률 ' + pct(vi['dividend_yield']) + '를 위험중립 성장배수에 반영하였다.' if vi['dividend_yield'] > 0 else '평가대상 기초자산은 배당이 없는 것으로 가정하였다.'}</p>
+<p><b>(4) 주가변동성</b><br>
+유사 상장회사(대용기업)의 주가를 기초로 평가기준일 기준 일별 로그수익률의 표준편차를 산출한 후,
+연간 영업일수를 적용하여 연 주가변동성을 산출하였다. 상기와 같이 산출된 연 주가변동성을
+Node 주기별로 환산하여 적용하였다.</p>
+{'<p><b>(5) 행사가격</b><br>계약상 옵션 대가(보장수익률) 연 ' + pct(growth) + '가 적용되어 행사가격이 시점에 따라 복리로 상승하는 구조이므로, 고정 행사가격이 아닌 시점별 행사가격 스케줄 K(t) = 기준가 × (1 + 대가율)^t 을 이항트리의 각 시점 노드에 적용하였다.</p>' if growth else ''}
 
 <h3>3. 거래 조건</h3>
 <p>{esc(c['contract_date'])} 체결된 {esc(c['contract_name'])}에 따라 {esc(c['investor'])}은
-{esc(u['issuer'])} {esc(u['security_type'])} {int(terms['quantity_shares']):,}주를 1주당
-{krw(vi['strike_price_krw'])}원에 매수할 수 있는 권리를 보유한다. 행사방식은 {style_label}이며,
-결제는 {esc(terms.get('settlement', '-'))} 방식이다.</p>
+{esc(u['issuer'])} {esc(u['security_type'])}에 대한 콜옵션을 보유한다. 계약상 대상주식수량
+{r.get('total_shares', 0):,}주 중 행사범위 {pct(r.get('exercise_scope', 1.0))}가 콜옵션 행사
+대상이며, 그중 평가대상 보유자에게 귀속되는 행사비율은 {pct(r.get('allocation_ratio', 1.0))}로서
+평가대상 콜옵션 수량은 <b>{r['quantity_shares']:,}주</b>이다.</p>
+<p>행사가격은 1주당 {strike_desc}이며, 행사방식은 {style_label}, 결제는
+{esc(terms.get('settlement', '-'))} 방식이다. 거래종결일은 {esc(vi['maturity_date'])}로서
+평가기준일 현재 잔존만기는 {vi['maturity_years']:.4f}년이다.</p>
 
 <h3>4. 평가결과</h3>
-<p>CRR모형({vi['binomial_steps']:,}스텝)에 의한 콜옵션 공정가치는 1주당
-<b>{krw(r['unit_value_krw'], 2)}원</b>, 대상주식수량 {r['quantity_shares']:,}주 기준 총
-<b>{krw(r['total_value_krw'])}원</b>으로 산정되었다.</p>
+<p>CRR모형({vi['binomial_steps']:,}스텝, 단위기간 {step_days:.1f}일)에 의한
+콜옵션의 공정가치는 1주당 <b>{krw(r['unit_value_krw'], 2)}원</b>으로 산정되었으며,
+평가대상 콜옵션 수량 {r['quantity_shares']:,}주를 적용한 총 평가액은
+<b>{krw(r['total_value_krw'])}원</b>이다.</p>
 
 <h4>가. 이항트리 구조 (예시: {EXAMPLE_TREE_STEPS}스텝)</h4>
 {_tree_table(stock_tree, f"주가 트리 (원) — 행 u×j는 상승 j회 노드, 열 t는 경과 스텝")}

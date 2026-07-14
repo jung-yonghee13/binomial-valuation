@@ -26,6 +26,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.stats import norm
 
+from valuation import payoffs as payoffs_mod
 from valuation.binomial import BinomialParams, Payoff
 
 
@@ -85,7 +86,9 @@ def price_european(
     s_t = params.s0 * np.exp(drift + params.sigma * np.sqrt(t) * z)
 
     # 경로별 페이오프를 현재가치로 할인
-    discounted = np.exp(-params.rf * t) * np.asarray(payoff(s_t), dtype=float)
+    # 유럽형이므로 만기 시점(스케줄의 마지막 원소)의 행사가격을 적용한다
+    exercise = payoffs_mod.evaluate(payoff, s_t, -1)
+    discounted = np.exp(-params.rf * t) * np.asarray(exercise, dtype=float)
 
     value = float(discounted.mean())  # 옵션가치 = 할인 페이오프의 평균
 
