@@ -73,6 +73,17 @@ flowchart LR
 | 문서 정보 추출 (Document Extraction) | 비정형 문서에서 정형 데이터를 뽑아내는 기술 | (예정) 계약서 PDF → 계약정보 JSON 자동 추출 |
 | 구조화 출력 (Structured Output) | LLM의 출력을 정해진 스키마(JSON)로 강제하는 기법 | (예정) 계약서 분석 에이전트의 추출 결과 형식 |
 
+## 대시보드 (웹 인터페이스)
+
+```bash
+streamlit run app.py
+```
+
+좌측에 계약조건(직접 입력 또는 계약정보 JSON 첨부)·평가 주요변수·피어그룹·계산 설정을 입력하고
+**가치평가 실행**을 누르면, 우측 미리보기 패널에 핵심 지표(1주당 가치·총 평가액·교차검증)와
+평가보고서 미리보기, 변동성·선도이자율 산출 내역, 민감도 분석이 표시되며
+결과 JSON(계산 과정)과 PDF 평가보고서를 바로 내려받을 수 있습니다.
+
 ## 이론적 배경: CRR 이항모형
 
 Cox-Ross-Rubinstein(1979) 모형은 기초자산(주가)이 매 단위기간 `dt`마다 일정 배수로 상승(`u`)하거나 하락(`d`)한다고 가정하고, 위험중립확률(`q`)로 만기 페이오프의 기대값을 역방향으로 할인하여 현재 가치를 구합니다.
@@ -215,6 +226,7 @@ call_value = price(params, payoff=lambda s: np.maximum(s - 100, 0), american=Tru
 ```
 이항모형/
 ├── README.md                          # 프로젝트 개요 (현재 문서)
+├── app.py                             # 웹 대시보드 (streamlit run app.py)
 ├── data/                              # 평가 입력 데이터
 │   ├── sample_contract.json           #   가상 계약 데이터 (검증용)
 │   ├── sample_ytm_curve.json          #   국고채 수익률 곡선 예시 (가상)
