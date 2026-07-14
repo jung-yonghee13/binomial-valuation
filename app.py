@@ -47,15 +47,41 @@ st.markdown(
         box-shadow: 0 3px 14px rgba(120, 80, 40, 0.07);
         padding: 0.4rem 0.9rem 0.7rem 0.9rem;
     }
-    /* 섹션 헤더: 보고서 챕터 헤드(큰 오렌지 번호 + 명조 제목) 스타일 */
     div[data-testid="stVerticalBlockBorderWrapper"] h3 {
-        color: #2d2d2d; font-size: 1.12rem; padding-top: 0.4rem;
-        font-family: 'Batang', '바탕', Georgia, serif; font-weight: 700;
+        color: #2d2d2d; font-size: 1.12rem; padding-top: 0.4rem; font-weight: 800;
         border-bottom: 2px solid #F4D9C8; padding-bottom: 0.45rem;
     }
     div[data-testid="stVerticalBlockBorderWrapper"] h3 .num {
         color: #FB5607; font-size: 1.55rem; font-weight: 800; margin-right: 0.5rem;
-        font-family: 'Malgun Gothic', sans-serif; vertical-align: -0.08rem;
+        vertical-align: -0.08rem;
+    }
+
+    /* ── 입력 위젯: 테두리를 넣어 배경과 확실히 구분 ── */
+    div[data-baseweb="input"], div[data-baseweb="select"] > div,
+    div[data-baseweb="base-input"] {
+        background: #FFFFFF !important;
+        border: 1.5px solid #E3CDBB !important;
+        border-radius: 10px !important;
+        transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    div[data-baseweb="input"]:hover, div[data-baseweb="select"] > div:hover {
+        border-color: #D3A987 !important;
+    }
+    div[data-baseweb="input"]:focus-within, div[data-baseweb="select"] > div:focus-within {
+        border-color: #E8490F !important;
+        box-shadow: 0 0 0 3px rgba(232, 73, 15, 0.13) !important;
+    }
+    div[data-baseweb="input"] input, div[data-baseweb="base-input"] input {
+        background: transparent !important;
+    }
+    div[data-testid="stNumberInputStepUp"], div[data-testid="stNumberInputStepDown"] {
+        background: #FFF8F2; border-left: 1px solid #E3CDBB;
+    }
+    div[data-testid="stFileUploaderDropzone"] {
+        background: #FFF8F2; border: 1.5px dashed #E3A77E; border-radius: 12px;
+    }
+    div[data-testid="stDataFrame"], div[data-testid="stDataEditor"] {
+        border: 1.5px solid #E3CDBB; border-radius: 10px; overflow: hidden;
     }
 
     /* 버튼: 오렌지 필 */
@@ -74,8 +100,6 @@ st.markdown(
         padding: 0.6rem 0.9rem;
     }
     div[data-testid="stMetricValue"] { color: #E8490F; font-weight: 800; font-size: 1.5rem; }
-
-    div[data-testid="stFileUploaderDropzone"] { border-radius: 14px; }
     </style>
     """,
     unsafe_allow_html=True,
