@@ -18,7 +18,11 @@
     "quantity_shares": 1756688,
     "strike_price_krw": 12500,
     "exercise_scope": 0.35,
-    "allocation_ratio": 0.40,
+    "holders": [
+      { "name": "행사자A", "ratio": 0.40 },
+      { "name": "행사자B", "ratio": 0.30 },
+      { "name": "행사자C", "ratio": 0.30 }
+    ],
     "strike_growth_rate": 0.08,
     "closing_date": "2029-03-19",
     "settlement": "차액 현금결제 또는 실물인수 중 투자자 선택"

@@ -84,6 +84,40 @@ class TestQuantityFromContractTerms:
         assert r["quantity_shares"] == 21_000
         assert r["total_value_krw"] == pytest.approx(r["unit_value_krw"] * 21_000)
 
+    def test_multiple_holders(self):
+        # 대상 150,000주 × 행사범위 35% = 52,500주를 세 보유자가 40/30/30 배분
+        result = run(self._contract(exercise_scope=0.35, holders=[
+            {"name": "행사자A", "ratio": 0.40},
+            {"name": "행사자B", "ratio": 0.30},
+            {"name": "행사자C", "ratio": 0.30},
+        ]), make_inputs())
+        r = result["results"]
+        holders = r["holders"]
+        assert len(holders) == 3
+        assert r["scoped_shares"] == 52_500
+        assert holders[0]["quantity_shares"] == 21_000  # 52,500 × 40%
+        assert holders[1]["quantity_shares"] == 15_750  # 52,500 × 30%
+        # 합계 수량·평가액이 보유자별 합과 일치
+        assert r["quantity_shares"] == sum(h["quantity_shares"] for h in holders)
+        assert r["total_value_krw"] == pytest.approx(sum(h["value_krw"] for h in holders))
+        # 각 보유자 평가액 = 1주당 가치 × 보유자 수량
+        for h in holders:
+            assert h["value_krw"] == pytest.approx(r["unit_value_krw"] * h["quantity_shares"])
+
+    def test_holders_ratio_over_100_percent_raises(self):
+        with pytest.raises(ValueError, match="합계"):
+            run(self._contract(holders=[
+                {"name": "A", "ratio": 0.6}, {"name": "B", "ratio": 0.6},
+            ]), make_inputs())
+
+    def test_holders_override_allocation_ratio(self):
+        # holders가 있으면 allocation_ratio는 무시된다
+        result = run(self._contract(
+            exercise_scope=1.0, allocation_ratio=0.99,
+            holders=[{"name": "A", "ratio": 0.5}],
+        ), make_inputs())
+        assert result["results"]["quantity_shares"] == 75_000  # 150,000 × 100% × 50%
+
     def test_defaults_to_full_quantity(self):
         result = run(CONTRACT, make_inputs())
         assert result["results"]["quantity_shares"] == 150_000
@@ -91,7 +125,7 @@ class TestQuantityFromContractTerms:
     def test_invalid_ratio_raises(self):
         with pytest.raises(ValueError, match="exercise_scope"):
             run(self._contract(exercise_scope=1.5), make_inputs())
-        with pytest.raises(ValueError, match="allocation_ratio"):
+        with pytest.raises(ValueError, match="행사비율"):
             run(self._contract(allocation_ratio=0.0), make_inputs())
 
     def test_strike_growth_recorded_and_lowers_value(self):

@@ -233,18 +233,41 @@ def run(contract: dict, inputs: dict) -> dict:
     unit_value = pricer(s0, sigma)  # 1주당 가치
 
     # ── 옵션 수량 산정 ──
-    #   콜옵션 수량 = 대상주식수량 × 행사범위 × 행사비율(평가대상 보유분)
-    #   (계약상 전체 주식 중 일부만 콜옵션 대상이고, 그중 일부만 해당 보유자 몫인 구조)
+    #   콜옵션 대상 주식수 = 대상주식수량 × 행사범위
+    #   각 보유자 수량 = 콜옵션 대상 주식수 × 보유자별 행사비율
+    #   (계약상 전체 주식 중 일부만 콜옵션 대상이고, 그 대상을 여러 보유자가 나눠 갖는 구조)
     total_shares = int(terms["quantity_shares"])
     # 주의: `x or 1.0`을 쓰면 0이 1로 둔갑하므로 None만 기본값으로 대체한다
     scope_raw = terms.get("exercise_scope")
-    alloc_raw = terms.get("allocation_ratio")
     exercise_scope = 1.0 if scope_raw is None else float(scope_raw)
-    allocation_ratio = 1.0 if alloc_raw is None else float(alloc_raw)
-    for label, ratio in (("exercise_scope", exercise_scope), ("allocation_ratio", allocation_ratio)):
+    if not 0 < exercise_scope <= 1:
+        raise ValueError(f"exercise_scope은 0 초과 1 이하의 비율이어야 합니다: {exercise_scope}")
+    scoped_shares = total_shares * exercise_scope  # 콜옵션 행사 대상 주식수
+
+    # 보유자 목록: holders(여러 명) 우선, 없으면 allocation_ratio(단일) 하위호환
+    holders_raw = terms.get("holders")
+    if not holders_raw:
+        alloc_raw = terms.get("allocation_ratio")
+        ratio = 1.0 if alloc_raw is None else float(alloc_raw)
+        holders_raw = [{"name": "평가대상 보유자", "ratio": ratio}]
+
+    holders = []
+    for h in holders_raw:
+        ratio = float(h["ratio"])
         if not 0 < ratio <= 1:
-            raise ValueError(f"{label}은 0 초과 1 이하의 비율이어야 합니다: {ratio}")
-    quantity = round(total_shares * exercise_scope * allocation_ratio)
+            raise ValueError(f"보유자 행사비율은 0 초과 1 이하여야 합니다: {h}")
+        qty = round(scoped_shares * ratio)
+        holders.append({
+            "name": h.get("name", "-"),
+            "ratio": ratio,
+            "quantity_shares": qty,
+            "value_krw": unit_value * qty,
+        })
+
+    total_ratio = sum(h["ratio"] for h in holders)
+    if total_ratio > 1 + 1e-9:
+        raise ValueError(f"보유자 행사비율 합계가 100%를 초과합니다: {total_ratio:.4f}")
+    quantity = sum(h["quantity_shares"] for h in holders)  # 평가대상 합계 수량
 
     # ── 3) 몬테카를로 교차검증 (유럽형 전용, 미국형은 LSMC 구현 전까지 생략) ──
     if american:
@@ -289,7 +312,9 @@ def run(contract: dict, inputs: dict) -> dict:
             "unit_value_krw": unit_value,
             "total_shares": total_shares,
             "exercise_scope": exercise_scope,
-            "allocation_ratio": allocation_ratio,
+            "scoped_shares": round(scoped_shares),
+            "holders": holders,
+            "allocation_ratio": total_ratio,
             "quantity_shares": quantity,
             "total_value_krw": unit_value * quantity,
         },

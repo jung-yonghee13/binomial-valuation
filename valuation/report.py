@@ -246,6 +246,31 @@ def _sensitivity_table(sensitivity: list[dict], base_value: float) -> str:
     </table>"""
 
 
+def _holders_table(r: dict) -> str:
+    """보유자별 콜옵션 수량·평가액 표를 생성한다 (보유자가 2명 이상일 때)."""
+    holders = r.get("holders") or []
+    if len(holders) < 2:
+        return ""
+    rows = "".join(
+        f"<tr><td>{esc(h['name'])}</td><td class='num'>{pct(h['ratio'])}</td>"
+        f"<td class='num'>{h['quantity_shares']:,} 주</td>"
+        f"<td class='num'>{krw(h['value_krw'])} 원</td></tr>"
+        for h in holders
+    )
+    return f"""
+    <h4>보유자별 평가결과</h4>
+    <p class="note">콜옵션 행사 대상 주식수 {r.get('scoped_shares', 0):,}주
+    (대상주식 {r.get('total_shares', 0):,}주 × 행사범위 {pct(r.get('exercise_scope', 1.0))})를
+    각 보유자의 행사비율로 배분하였다.</p>
+    <table style='width: 92%'>
+      <tr><th>보유자</th><th class='num'>행사비율</th><th class='num'>콜옵션 수량</th><th class='num'>평가액</th></tr>
+      {rows}
+      <tr><th>합계</th><th class='num'>{pct(r.get('allocation_ratio', 1.0))}</th>
+          <th class='num'>{r['quantity_shares']:,} 주</th>
+          <th class='num'>{krw(r['total_value_krw'])} 원</th></tr>
+    </table>"""
+
+
 def build_report_html(contract: dict, result: dict) -> str:
     """계약정보와 평가결과로부터 보고서 HTML 전문을 생성한다."""
     c = contract["contract"]
@@ -391,13 +416,11 @@ def build_report_html(contract: dict, result: dict) -> str:
 <h3>3. 평가결과</h3>
 <table style='width: 78%'>
   <tr><th style='width: 45%'>콜옵션 1주당 공정가치</th><td class='num'><b>{krw(r['unit_value_krw'], 2)} 원</b></td></tr>
-  <tr><th>콜옵션 수량</th><td class='num'>{r['quantity_shares']:,} 주</td></tr>
+  <tr><th>평가대상 콜옵션 수량</th><td class='num'>{r['quantity_shares']:,} 주</td></tr>
   <tr><th>총 평가액</th><td class='num'><b>{krw(r['total_value_krw'])} 원</b></td></tr>
   <tr><th>몬테카를로 교차검증</th><td>{'생략' if result['cross_check'].get('skipped') else ('합격 — 이항모형 평가액이 시뮬레이션 신뢰구간 내' if result['cross_check']['passed'] else '불합격')}</td></tr>
 </table>
-<p class="note">총 평가액 = 1주당 공정가치 × 콜옵션 수량
-({r.get('total_shares', 0):,}주 × 행사범위 {pct(r.get('exercise_scope', 1.0))} ×
-행사비율 {pct(r.get('allocation_ratio', 1.0))} = {r['quantity_shares']:,}주)</p>
+{_holders_table(r)}
 
 <h3>4. 주요변수 및 가정</h3>
 <p>본 평가에 적용한 주요변수의 정의와 적용 내역은 다음과 같다. 각 변수의 상세한 산출 근거는
@@ -550,9 +573,9 @@ Node 주기별로 환산하여 적용하였다.</p>
 <h3>3. 거래 조건</h3>
 <p>{esc(c['contract_date'])} 체결된 {esc(c['contract_name'])}에 따라 {esc(c['investor'])}은
 {esc(u['issuer'])} {esc(u['security_type'])}에 대한 콜옵션을 보유한다. 계약상 대상주식수량
-{r.get('total_shares', 0):,}주 중 행사범위 {pct(r.get('exercise_scope', 1.0))}가 콜옵션 행사
-대상이며, 그중 평가대상 보유자에게 귀속되는 행사비율은 {pct(r.get('allocation_ratio', 1.0))}로서
-평가대상 콜옵션 수량은 <b>{r['quantity_shares']:,}주</b>이다.</p>
+{r.get('total_shares', 0):,}주 중 행사범위 {pct(r.get('exercise_scope', 1.0))}에 해당하는
+{r.get('scoped_shares', 0):,}주가 콜옵션 행사 대상이며,
+{'이를 아래 보유자별 행사비율에 따라 배분한 결과 평가대상 콜옵션 수량은 ' if len(r.get('holders', [])) >= 2 else '그중 평가대상 보유자의 행사비율은 ' + pct(r.get('allocation_ratio', 1.0)) + '로서 평가대상 콜옵션 수량은 '}<b>{r['quantity_shares']:,}주</b>이다.</p>
 <p>행사가격은 1주당 {strike_desc}이며, 행사방식은 {style_label}, 결제는
 {esc(terms.get('settlement', '-'))} 방식이다. 거래종결일은 {esc(vi['maturity_date'])}로서
 평가기준일 현재 잔존만기는 {vi['maturity_years']:.4f}년이다.</p>
@@ -562,6 +585,7 @@ Node 주기별로 환산하여 적용하였다.</p>
 콜옵션의 공정가치는 1주당 <b>{krw(r['unit_value_krw'], 2)}원</b>으로 산정되었으며,
 평가대상 콜옵션 수량 {r['quantity_shares']:,}주를 적용한 총 평가액은
 <b>{krw(r['total_value_krw'])}원</b>이다.</p>
+{_holders_table(r)}
 
 <h4>가. 이항트리 구조 (예시: {EXAMPLE_TREE_STEPS}스텝)</h4>
 {_tree_table(stock_tree, f"주가 트리 (원) — 행 u×j는 상승 j회 노드, 열 t는 경과 스텝")}

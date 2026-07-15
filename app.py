@@ -171,33 +171,54 @@ with left:
     # ── 02 콜옵션 조건 ──
     with st.container(border=True):
         st.markdown('### <span class="num">02</span> 콜옵션 조건', unsafe_allow_html=True)
-        st.caption("계약서상 행사범위·행사비율·옵션 대가(보장수익률) 조건. "
-                   "콜옵션 수량 = 대상주식수량 × 행사범위 × 행사비율")
+        st.caption("계약서상 행사범위·옵션 대가(보장수익률) 및 보유자별 행사비율. "
+                   "콜옵션 대상 = 대상주식수량 × 행사범위, 보유자별 수량 = 대상 × 행사비율")
 
-        t1, t2, t3 = st.columns(3)
+        t1, t2 = st.columns(2)
         with t1:
             exercise_scope = st.number_input(
                 "행사범위 (%)", 0.01, 100.0,
                 float(pt.get("exercise_scope", 1.0)) * 100, 1.0,
                 help="대상주식 중 콜옵션 행사 대상이 되는 비율 (예: 35%)")
         with t2:
-            allocation_ratio = st.number_input(
-                "행사비율 (%)", 0.01, 100.0,
-                float(pt.get("allocation_ratio", 1.0)) * 100, 1.0,
-                help="행사 대상 중 평가대상 보유자에게 귀속되는 비율 (예: 40%)")
-        with t3:
             strike_growth = st.number_input(
                 "옵션 대가율 (연 %, 0=고정)", 0.0, 50.0,
                 float(pt.get("strike_growth_rate", 0.0)) * 100, 0.5,
                 help="행사 시점까지 보장하는 연 수익률. 행사가격이 K(t) = 기준가 × (1+대가율)^t 로 "
                      "복리 상승합니다. 0이면 만기까지 고정 행사가격.")
 
-        _opt_qty = round(quantity * exercise_scope / 100 * allocation_ratio / 100)
+        st.markdown("**옵션 보유자별 행사비율** — 여러 명이면 행을 추가하세요")
+        default_holders = pt.get("holders")
+        if not default_holders:
+            _alloc = pt.get("allocation_ratio", 1.0)
+            default_holders = [{"name": "평가대상 보유자", "ratio": _alloc}]
+        holders_df = pd.DataFrame([
+            {"보유자": h.get("name", ""), "행사비율(%)": float(h["ratio"]) * 100}
+            for h in default_holders
+        ])
+        holders_df = st.data_editor(
+            holders_df, num_rows="dynamic", use_container_width=True,
+            column_config={
+                "보유자": st.column_config.TextColumn(width="large"),
+                "행사비율(%)": st.column_config.NumberColumn(min_value=0.0, max_value=100.0, step=1.0),
+            })
+
+        holders = [
+            {"name": str(row["보유자"]).strip() or f"보유자{i+1}",
+             "ratio": float(row["행사비율(%)"]) / 100.0}
+            for i, (_, row) in enumerate(holders_df.iterrows())
+            if float(row.get("행사비율(%)") or 0) > 0
+        ]
+        _scoped = round(quantity * exercise_scope / 100)
+        _opt_qty = sum(round(_scoped * h["ratio"]) for h in holders)
+        _total_ratio = sum(h["ratio"] for h in holders)
         _years = max((maturity_date - contract_date).days, 0) / 365
         _strike_end = strike * (1 + strike_growth / 100) ** _years
+        if _total_ratio > 1 + 1e-9:
+            st.warning(f"보유자 행사비율 합계가 {_total_ratio*100:.1f}%로 100%를 초과합니다.")
         st.markdown(
-            f"→ **콜옵션 수량 {_opt_qty:,}주** "
-            f"({quantity:,}주 × {exercise_scope:g}% × {allocation_ratio:g}%) · "
+            f"→ 행사 대상 {_scoped:,}주 ({quantity:,}주 × {exercise_scope:g}%) · "
+            f"**평가대상 콜옵션 수량 {_opt_qty:,}주** (보유자 {len(holders)}명, 합계 {_total_ratio*100:g}%) · "
             f"**행사가격 {strike:,.0f}원**"
             + (f" → 만기 시 {_strike_end:,.0f}원" if strike_growth > 0 else " (만기까지 고정)")
         )
@@ -281,7 +302,7 @@ if run_clicked:
             "quantity_shares": int(quantity),
             "strike_price_krw": float(strike),
             "exercise_scope": exercise_scope / 100.0,
-            "allocation_ratio": allocation_ratio / 100.0,
+            "holders": holders,
             "strike_growth_rate": strike_growth / 100.0,
             "closing_date": maturity_date.isoformat(),
             "settlement": settlement,
