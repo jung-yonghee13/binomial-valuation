@@ -128,6 +128,7 @@ with left:
                 help="계약서 PDF의 자동 분석·추출은 Claude 에이전트 세션에서 수행합니다. "
                      "추출된 계약정보 JSON을 첨부하면 아래 입력값의 기본값으로 사용됩니다.",
             )
+        # 기본값: 첨부 JSON이 있으면 그것, 없으면 샘플 계약(보유자 예시 포함)을 채운다
         prefill = {}
         if uploaded is not None:
             try:
@@ -135,6 +136,10 @@ with left:
                 st.success(f"계약정보 로드: {prefill.get('contract', {}).get('contract_name', '(이름 없음)')}")
             except Exception as exc:
                 st.error(f"JSON 파싱 실패: {exc}")
+        else:
+            sample = ROOT / "data" / "sample_contract.json"
+            if sample.exists():
+                prefill = json.loads(sample.read_text(encoding="utf-8-sig"))
 
         pc = prefill.get("contract", {})
         pu = prefill.get("underlying", {})
