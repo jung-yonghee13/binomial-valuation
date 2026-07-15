@@ -163,6 +163,7 @@ def _volatility_rows(vol: dict) -> str:
     detail = vol.get("detail")
     if not detail:
         return ""
+    own = detail.get("own_stock")
     rows = "".join(
         f"<tr><td>{esc(p['name'])} ({esc(p['ticker'])})</td>"
         f"<td class='num'>{pct(p['volatility'])}</td>"
@@ -170,8 +171,21 @@ def _volatility_rows(vol: dict) -> str:
         f"<td>{esc(p['first_date'])} ~ {esc(p['last_date'])}</td></tr>"
         for p in detail["peers"]
     )
+    if own:
+        # 상장주식: 자기 주가로 직접 산출 (피어그룹 없음)
+        return f"""
+    <h3>변동성 산출 내역</h3>
+    <p>기초자산이 상장주식이므로 유사기업(피어그룹)을 이용하지 않고 해당 종목의
+    일별 종가로부터 직접 변동성을 산출하였다.</p>
+    <table>
+      <tr><th>기초자산 종목</th><th class='num'>연환산 변동성</th><th class='num'>관측치</th><th>수집 기간</th></tr>
+      {rows}
+    </table>
+    <p class="note">출처: {esc(detail.get('data_source', '-'))}</p>"""
     return f"""
     <h3>피어그룹 변동성 산출 내역</h3>
+    <p>기초자산이 비상장주식이므로 유사 상장기업(대용기업)의 역사적 변동성을
+    이용하여 추정하였다.</p>
     <table>
       <tr><th>대용기업</th><th class='num'>연환산 변동성</th><th class='num'>관측치</th><th>수집 기간</th></tr>
       {rows}

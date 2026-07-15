@@ -45,30 +45,56 @@ def years_between(start: str, end: str) -> float:
     return days / DAYS_PER_YEAR
 
 
-def resolve_volatility(inputs: dict) -> dict:
+def resolve_volatility(inputs: dict, contract: dict) -> dict:
     """변동성 입력을 해석한다.
 
     - 숫자면: 사용자가 직접 추정해 넣은 값으로 그대로 사용
-    - "auto"면: 피어그룹 주가를 수집해 역사적 변동성 평균을 자동 산출
+    - "auto"이고 기초자산이 상장주식이면: 자기 주가로 변동성 직접 산출 (피어그룹 불필요)
+    - "auto"이고 비상장이면: 피어그룹 주가를 수집해 역사적 변동성 평균을 산출
     반환 dict에는 값과 함께 산출 근거(basis)와 상세 내역(detail)이 담긴다.
     """
     value = inputs["inputs"]["volatility"]
-    if isinstance(value, (int, float)):
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
         return {"value": float(value), "basis": "사용자 직접 입력", "detail": None}
 
     if value != "auto":
         raise ValueError("volatility는 숫자 또는 'auto'여야 합니다.")
 
     est = inputs.get("volatility_estimation", {})
+    lookback = est.get("lookback_years", 1.0)
+    trading_days = est.get("annualization_factor", volatility.TRADING_DAYS)
+    underlying = contract.get("underlying", {})
+
+    # 상장주식이면 자기 주가로 직접 산출 (피어그룹이 필요 없다)
+    if underlying.get("listing_status") == "상장" and underlying.get("ticker"):
+        detail = volatility.own_stock_volatility(
+            ticker=underlying["ticker"],
+            name=underlying.get("issuer", underlying["ticker"]),
+            valuation_date=inputs["inputs"]["valuation_date"],
+            lookback_years=lookback,
+            trading_days=trading_days,
+        )
+        return {
+            "value": detail["mean_volatility"],
+            "basis": "기초자산(상장주식) 자기 주가의 역사적 변동성",
+            "detail": detail,
+        }
+
+    # 비상장이면 피어그룹(대용기업) 변동성 평균
+    if not est.get("peer_group"):
+        raise ValueError(
+            "비상장 기초자산의 변동성 자동 산출에는 피어그룹이 필요합니다. "
+            "volatility_estimation.peer_group을 지정하거나 변동성을 직접 입력하세요."
+        )
     detail = volatility.peer_group_volatility(
         peer_group=est["peer_group"],
         valuation_date=inputs["inputs"]["valuation_date"],
-        lookback_years=est.get("lookback_years", 1.0),
-        trading_days=est.get("annualization_factor", volatility.TRADING_DAYS),
+        lookback_years=lookback,
+        trading_days=trading_days,
     )
     return {
         "value": detail["mean_volatility"],
-        "basis": "피어그룹 역사적 변동성 산술평균 (자동 산출)",
+        "basis": "피어그룹(대용기업) 역사적 변동성 산술평균 (자동 산출)",
         "detail": detail,
     }
 
@@ -149,7 +175,7 @@ def run(contract: dict, inputs: dict) -> dict:
 
     # ── 1) 입력 해석 ──
     maturity_years = years_between(core["valuation_date"], core["maturity_date"])
-    vol = resolve_volatility(inputs)
+    vol = resolve_volatility(inputs, contract)
     rf = resolve_risk_free(inputs, maturity_years)
 
     # 배당: pays_dividend가 True일 때만 배당수익률을 반영

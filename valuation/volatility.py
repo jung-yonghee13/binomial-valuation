@@ -108,3 +108,41 @@ def peer_group_volatility(
         "period": {"start": str(start.date()), "end": str(end.date())},
         "data_source": "FinanceDataReader (KRX 시세)",
     }
+
+
+def own_stock_volatility(
+    ticker: str,
+    name: str,
+    valuation_date,
+    lookback_years: float = 1.0,
+    trading_days: int = TRADING_DAYS,
+) -> dict:
+    """상장기업의 자기 주가로 역사적 변동성을 계산한다.
+
+    기초자산이 상장주식이면 피어그룹이 필요 없이 해당 종목의 일별 종가로
+    변동성을 직접 산출한다. 반환 dict는 peer_group_volatility()와 같은 형식이라
+    보고서·결과 처리에서 동일하게 다룰 수 있다 (peers에 자기 종목 1건만 담김).
+    """
+    ticker = str(ticker).strip().zfill(6)
+    end = pd.Timestamp(valuation_date)
+    start = end - pd.Timedelta(days=round(lookback_years * 365.25))
+
+    prices = fetch_close_prices(ticker, start, end)
+    vol = annualized_volatility(prices, trading_days)
+    entry = {
+        "name": name or ticker,
+        "ticker": ticker,
+        "volatility": vol,
+        "observations": int(len(prices)),
+        "first_date": str(prices.index[0].date()),
+        "last_date": str(prices.index[-1].date()),
+    }
+    return {
+        "mean_volatility": vol,
+        "peers": [entry],  # 자기 종목 1건 (보고서 표를 동일하게 렌더링하기 위함)
+        "lookback_years": lookback_years,
+        "trading_days": trading_days,
+        "period": {"start": str(start.date()), "end": str(end.date())},
+        "data_source": "FinanceDataReader (KRX 시세) — 기초자산 자기 주가",
+        "own_stock": True,
+    }
