@@ -17,6 +17,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
+from valuation import krx_lookup
 from valuation import report as report_module
 from valuation import run_valuation
 
@@ -244,22 +245,42 @@ with left:
     # ── 03 피어그룹 ──
     with st.container(border=True):
         st.markdown('### <span class="num">04</span> 피어그룹 — 변동성 자동 산출', unsafe_allow_html=True)
-        st.caption("유사 상장기업과 6자리 종목코드를 지정하면 일별 종가를 자동 수집해 연환산 변동성 평균을 계산합니다.")
+        st.caption("유사 상장기업을 지정하면 일별 종가를 자동 수집해 연환산 변동성 평균을 계산합니다. "
+                   "**기업명 또는 종목코드 중 하나만 입력하면 나머지가 자동으로 채워집니다.**")
 
-        default_peers = pd.DataFrame(
-            prefill.get("volatility_estimation", {}).get("peer_group")
-            or [
-                {"name": "안랩", "ticker": "053800"},
-                {"name": "더존비즈온", "ticker": "012510"},
-                {"name": "한글과컴퓨터", "ticker": "030520"},
-                {"name": "웹케시", "ticker": "053580"},
-                {"name": "알서포트", "ticker": "131370"},
-            ]
-        )
+        # 세션에 피어 표를 보관하고, 편집 시 KRX 목록으로 빈 칸을 자동 완성한다
+        if "peers_df" not in st.session_state:
+            st.session_state["peers_df"] = pd.DataFrame(
+                prefill.get("volatility_estimation", {}).get("peer_group")
+                or [
+                    {"name": "안랩", "ticker": "053800"},
+                    {"name": "더존비즈온", "ticker": "012510"},
+                    {"name": "한글과컴퓨터", "ticker": "030520"},
+                    {"name": "웹케시", "ticker": "053580"},
+                    {"name": "알서포트", "ticker": "131370"},
+                ]
+            )
         cp1, cp2 = st.columns([2, 1])
         with cp1:
-            peers_df = st.data_editor(default_peers, num_rows="dynamic", use_container_width=True,
-                                      column_config={"name": "기업명", "ticker": "종목코드"})
+            edited = st.data_editor(
+                st.session_state["peers_df"], num_rows="dynamic", use_container_width=True,
+                column_config={
+                    "name": st.column_config.TextColumn("기업명"),
+                    "ticker": st.column_config.TextColumn("종목코드", help="6자리, 비워두면 기업명으로 자동 조회"),
+                },
+                key="peers_editor")
+
+            # 편집된 각 행에서 비어 있는 쪽(기업명/코드)을 KRX 목록으로 채운다
+            filled_rows = []
+            for _, row in edited.iterrows():
+                nm, tk = krx_lookup.autofill(row.get("name", ""), str(row.get("ticker", "") or ""))
+                filled_rows.append({"name": nm, "ticker": tk})
+            filled = pd.DataFrame(filled_rows or [{"name": "", "ticker": ""}])
+            # 자동 완성으로 값이 바뀌었으면 표를 갱신해 다시 렌더링 (무한 루프 방지: 변경 시에만)
+            if not filled.reset_index(drop=True).equals(edited.reset_index(drop=True)):
+                st.session_state["peers_df"] = filled
+                st.rerun()
+            peers_df = edited
         with cp2:
             lookback = st.number_input("수집 기간 (년)", 0.5, 5.0, 1.0, 0.5)
             manual_vol = st.number_input("변동성 직접 입력 (%, 0=자동)", 0.0, 200.0, 0.0, 1.0,
