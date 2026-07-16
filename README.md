@@ -73,20 +73,6 @@ flowchart LR
 
 **④ 보고 (Reporting)** — 결과 JSON만을 수치 원천으로 삼아 PDF 평가보고서를 생성합니다. 가정·산출 근거·데이터 출처가 보고서에 상세 기재됩니다.
 
-### AI 기술 용어
-
-| 용어 | 의미 | 이 프로젝트에서의 적용 |
-|------|------|------------------------|
-| 에이전틱 워크플로 (Agentic Workflow) | AI 에이전트가 도구를 사용하며 다단계 작업을 자율 수행 | 스킬에 정의된 6단계 평가 절차를 에이전트가 조율 |
-| 스킬 (Skill) | 에이전트에게 부여하는 표준작업절차(SOP) 문서 | `.claude/skills/valuation-report/SKILL.md` |
-| API 연동 (API Integration) | 정해진 규약으로 데이터를 요청·응답 | FinanceDataReader → KRX 피어 주가, Seibro → 국고채 수익률 |
-| 브라우저 자동화 (Browser Automation) | 에이전트가 실제 브라우저를 조작해 화면 데이터를 수집 | KOFIA 수집 폴백 (WAF 차단 대응) |
-| 결정론적 파이프라인 (Deterministic Pipeline) | 같은 입력이면 항상 같은 출력 | `valuation/` 모듈 전체 — LLM의 확률적 생성과 분리 |
-| 데이터 계약 (Data Contract) | 모듈 간 주고받는 데이터 형식의 약속 | 계약·입력·결과 JSON 구조 |
-| 교차검증 (Cross-validation) | 독립적 방법으로 재계산해 신뢰성 확보 | 이항트리 vs 몬테카를로 (95% CI 판정) |
-| 휴먼인더루프 (Human-in-the-loop) | 핵심 판단 지점에 사람의 확인을 배치 | 피어그룹 선정, 기초자산 가액 추정, 가정 승인 |
-| 문서 정보 추출 (Document Extraction) | 비정형 문서에서 정형 데이터 추출 | (로드맵) 계약서 PDF → 계약정보 JSON |
-
 ---
 
 ## 2. 사용 방법
