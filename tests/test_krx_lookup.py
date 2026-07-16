@@ -80,6 +80,47 @@ class TestAutofill:
         assert krx_lookup.autofill("nan", "012510") == ("더존비즈온", "012510")
 
 
+class TestAutofillDirected:
+    def test_name_edit_updates_ticker(self):
+        assert krx_lookup.autofill_directed(
+            "삼성전자", "030520", name_changed=True, ticker_changed=False
+        ) == ("삼성전자", "005930")
+
+    def test_ticker_edit_updates_name(self):
+        assert krx_lookup.autofill_directed(
+            "안랩", "005930", name_changed=False, ticker_changed=True
+        ) == ("삼성전자", "005930")
+
+    def test_cleared_name_is_not_refilled(self):
+        # 이름을 지우면 코드가 있어도 되채우지 않는다 (삭제 존중)
+        assert krx_lookup.autofill_directed(
+            "", "053800", name_changed=True, ticker_changed=False
+        ) == ("", "053800")
+
+    def test_cleared_ticker_is_not_refilled(self):
+        assert krx_lookup.autofill_directed(
+            "안랩", "", name_changed=False, ticker_changed=True
+        ) == ("안랩", "")
+
+    def test_unchanged_row_falls_back_to_plain_autofill(self):
+        # 변경 없는 미완성 행(프리필 등)은 기존 규칙으로 빈 쪽을 채운다
+        assert krx_lookup.autofill_directed(
+            "안랩", "", name_changed=False, ticker_changed=False
+        ) == ("안랩", "053800")
+
+    def test_name_typed_into_ticker_column(self):
+        assert krx_lookup.autofill_directed(
+            "", "삼성전자", name_changed=False, ticker_changed=True
+        ) == ("삼성전자", "005930")
+
+
+class TestAllNames:
+    def test_returns_sorted_unique_names(self):
+        names = krx_lookup.all_names()
+        assert "안랩" in names and "삼성전자" in names
+        assert names == sorted(set(names))
+
+
 class TestSnapshotFallback:
     def test_live_failure_falls_back_to_snapshot(self, monkeypatch):
         # 실시간 수집이 죽어도 동봉 스냅샷으로 조회가 계속 된다 (배포 서버 KRX 차단 대비)

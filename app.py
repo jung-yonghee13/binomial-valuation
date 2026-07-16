@@ -23,7 +23,7 @@ from valuation import run_valuation
 
 ROOT = Path(__file__).parent
 ACCENT = "#E8490F"  # 포인트 컬러 (보고서 오렌지 계열)
-APP_BUILD = "2026-07-16.2"  # 배포 버전 확인용 (푸시 시 갱신)
+APP_BUILD = "2026-07-16.3"  # 배포 버전 확인용 (푸시 시 갱신)
 
 st.set_page_config(page_title="이항모형 가치평가", page_icon="📊", layout="wide")
 
@@ -275,7 +275,8 @@ with left:
                                              help="0보다 크게 입력하면 자기 주가 산출 대신 이 값을 사용")
         else:
             st.caption("기초자산이 **비상장주식**이므로 유사 상장기업(대용기업)의 변동성 평균으로 추정합니다. "
-                       "**기업명 또는 종목코드 중 하나만 입력하면 나머지가 자동으로 채워집니다.**")
+                       "**기업명 칸을 클릭하면 상장사 목록에서 검색·선택할 수 있고, 선택하면 종목코드가 자동으로 채워집니다.** "
+                       "(종목코드를 직접 입력해도 기업명이 채워집니다)")
 
             # 세션에 피어 표를 보관하고, 편집 시 KRX 목록으로 빈 칸을 자동 완성한다
             if "peers_df" not in st.session_state:
@@ -307,30 +308,52 @@ with left:
 
             cp1, cp2 = st.columns([2, 1])
             with cp1:
+                prev_df = st.session_state["peers_df"]  # 직전 상태 (편집 방향 판별용)
                 edited = st.data_editor(
                     st.session_state["peers_df"], num_rows="dynamic", use_container_width=True,
                     column_config={
-                        "name": st.column_config.TextColumn("기업명"),
-                        "ticker": st.column_config.TextColumn("종목코드", help="6자리, 비워두면 기업명으로 자동 조회"),
+                        # 기업명: 상장사 목록에서 검색·선택 (타이핑하면 후보가 뜬다)
+                        "name": st.column_config.SelectboxColumn(
+                            "기업명", options=krx_lookup.all_names(), required=False,
+                            help="클릭 후 타이핑하면 상장사 후보가 검색됩니다"),
+                        "ticker": st.column_config.TextColumn("종목코드", help="6자리, 직접 입력하면 기업명이 자동 조회됩니다"),
                     },
                     key=f"peers_editor_{st.session_state['peers_ver']}")
 
-                # 편집된 각 행에서 비어 있는 쪽(기업명/코드)을 KRX 목록으로 채운다
+                # 방금 편집된 칸을 기준으로 반대편을 자동완성한다 (지운 칸은 되채우지 않음)
+                def _prev_at(i: int) -> tuple[str, str]:
+                    if i < len(prev_df):
+                        r = prev_df.iloc[i]
+                        return _cell(r.get("name")), _cell(r.get("ticker"))
+                    return "", ""  # 새로 추가된 행
+
                 normalized_rows, filled_rows = [], []
-                for _, row in edited.iterrows():
+                for i in range(len(edited)):
+                    row = edited.iloc[i]
                     nm_raw, tk_raw = _cell(row.get("name")), _cell(row.get("ticker"))
                     normalized_rows.append({"name": nm_raw, "ticker": tk_raw})
-                    nm, tk = krx_lookup.autofill(nm_raw, tk_raw)
+                    pv_nm, pv_tk = _prev_at(i)
+                    nm, tk = krx_lookup.autofill_directed(
+                        nm_raw, tk_raw,
+                        name_changed=(nm_raw != pv_nm),
+                        ticker_changed=(tk_raw != pv_tk))
                     filled_rows.append({"name": nm, "ticker": tk})
                 normalized = pd.DataFrame(normalized_rows or [{"name": "", "ticker": ""}])
                 filled = pd.DataFrame(filled_rows or [{"name": "", "ticker": ""}])
 
+                def _for_widget(df: pd.DataFrame) -> pd.DataFrame:
+                    # 드롭다운(Selectbox) 칸의 빈 값은 ""가 아닌 None이어야 한다
+                    out = df.copy()
+                    out["name"] = out["name"].map(lambda v: v if v else None)
+                    return out
+
                 # 자동완성으로 값이 바뀌었으면: 편집 내역을 표 데이터로 흡수하고
                 # 위젯을 새로 초기화(key 변경)해 채워진 값이 화면에 반영되게 한다
                 if not filled.reset_index(drop=True).equals(normalized.reset_index(drop=True)):
-                    st.session_state["peers_df"] = filled
+                    st.session_state["peers_df"] = _for_widget(filled)
                     st.session_state["peers_ver"] += 1
                     st.rerun()
+                st.session_state["peers_df"] = _for_widget(filled)  # 다음 편집의 비교 기준
                 peers_df = filled
             with cp2:
                 lookback = st.number_input("수집 기간 (년)", 0.5, 5.0, 1.0, 0.5)

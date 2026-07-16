@@ -97,6 +97,11 @@ def is_code(text: str) -> bool:
     return bool(re.fullmatch(r"\d{6}", str(text).strip()))
 
 
+def all_names() -> "list[str]":
+    """전체 상장사 기업명 목록 (드롭다운 후보용, 가나다순)."""
+    return sorted(set(_build_index()["by_code"].values()))
+
+
 def code_to_name(code: str) -> str | None:
     """종목코드로 기업명을 조회한다 (없으면 None)."""
     return _build_index()["by_code"].get(str(code).strip().zfill(6))
@@ -105,6 +110,14 @@ def code_to_name(code: str) -> str | None:
 def name_to_code(name: str) -> str | None:
     """기업명으로 종목코드를 조회한다 (없으면 None)."""
     return _build_index()["by_name"].get(_normalize(name))
+
+
+def _clean(x) -> str:
+    """셀 값 정규화 — None/NaN 표기를 빈 문자열로."""
+    if x is None:
+        return ""
+    s = str(x).strip()
+    return "" if s.lower() in ("nan", "none") else s
 
 
 def autofill(name: str, ticker: str) -> tuple[str, str]:
@@ -116,12 +129,6 @@ def autofill(name: str, ticker: str) -> tuple[str, str]:
     - 조회 실패나 네트워크 오류: 원래 값 유지 (예외를 던지지 않는다)
     반환: (기업명, 종목코드)
     """
-    def _clean(x) -> str:
-        if x is None:
-            return ""
-        s = str(x).strip()
-        return "" if s.lower() in ("nan", "none") else s
-
     name = _clean(name)
     ticker = _clean(ticker)
     # 종목코드 칸에 기업명을 적은 경우도 대응: 코드가 아니면 이름 후보로 본다
@@ -144,6 +151,44 @@ def autofill(name: str, ticker: str) -> tuple[str, str]:
             code = name_to_code(name)
             if code and code != ticker.zfill(6):
                 ticker = code
+    except Exception:
+        pass  # 조회 실패 시 입력값을 그대로 둔다
+    return name, ticker
+
+
+def autofill_directed(
+    name: str, ticker: str, name_changed: bool, ticker_changed: bool
+) -> tuple[str, str]:
+    """편집 방향을 아는 자동완성 — 사용자가 방금 바꾼 칸을 기준으로 반대편을 갱신한다.
+
+    autofill()과 달리 "어느 칸을 편집했는지"를 받아서:
+    - 기업명을 바꿨으면 → 종목코드를 이름 기준으로 갱신
+    - 종목코드를 바꿨으면 → 기업명을 코드 기준으로 갱신
+    - 칸을 지웠으면(변경 후 빈 값) → 되채우지 않고 빈 채로 둔다 (삭제 존중)
+    - 아무것도 안 바꿨으면 → 기존 autofill 규칙(빈 쪽만 채움)
+    """
+    name = _clean(name)
+    ticker = _clean(ticker)
+
+    if not name_changed and not ticker_changed:
+        return autofill(name, ticker)
+
+    try:
+        if name_changed and name:
+            code = name_to_code(name)
+            if code:
+                ticker = code
+        elif ticker_changed and ticker:
+            if is_code(ticker):
+                found = code_to_name(ticker)
+                if found:
+                    name = found
+            else:
+                # 종목코드 칸에 기업명을 적은 경우
+                code = name_to_code(ticker)
+                if code:
+                    name, ticker = code_to_name(code) or ticker, code
+        # 그 외(칸을 지운 경우 등)는 입력 그대로 둔다
     except Exception:
         pass  # 조회 실패 시 입력값을 그대로 둔다
     return name, ticker
