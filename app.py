@@ -26,11 +26,14 @@ ACCENT = "#E8490F"  # 포인트 컬러 (보고서 오렌지 계열)
 
 st.set_page_config(page_title="이항모형 가치평가", page_icon="📊", layout="wide")
 
-# ── 스타일: 웜 크림 배경 + 흰색 라운드 카드 + 보고서 챕터 헤드 톤 ──
+# ── 스타일: 쿨 블루-라벤더 그라데이션 배경 + 흰 카드 + 오렌지 포인트 ──
 st.markdown(
     """
     <style>
-    .stApp { background: #F7F1EA; }
+    .stApp {
+        background: linear-gradient(155deg, #E7EDFA 0%, #EDE9FB 48%, #FBEEF2 100%);
+        background-attachment: fixed;
+    }
     header[data-testid="stHeader"] { background: transparent; }
     .block-container { padding-top: 1.1rem; }
 
@@ -39,13 +42,13 @@ st.markdown(
         letter-spacing: -0.01em; line-height: 1.1; margin: 0 0 0.3rem 0;
         text-align: center;
     }
-    .brand-sub { color: #6b6257; font-size: 0.92rem; margin-bottom: 0.6rem;
+    .brand-sub { color: #5a5f70; font-size: 0.92rem; margin-bottom: 0.6rem;
         text-align: center; }
 
     /* 섹션 카드 */
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        background: #FFFFFF; border: 1px solid #EFE3D6; border-radius: 18px;
-        box-shadow: 0 3px 14px rgba(120, 80, 40, 0.07);
+        background: #FFFFFF; border: 1px solid #E4E4F0; border-radius: 18px;
+        box-shadow: 0 4px 16px rgba(70, 70, 110, 0.08);
         padding: 0.4rem 0.9rem 0.7rem 0.9rem;
     }
     div[data-testid="stVerticalBlockBorderWrapper"] h3 {
