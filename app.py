@@ -287,6 +287,22 @@ with left:
                         {"name": "알서포트", "ticker": "131370"},
                     ]
                 )
+            # data_editor는 같은 key로는 내부 편집 상태(추가·수정 행)를 계속 재적용하므로,
+            # 자동완성으로 표를 갱신할 때마다 key를 바꿔 위젯을 새 데이터로 초기화한다
+            if "peers_ver" not in st.session_state:
+                st.session_state["peers_ver"] = 0
+
+            def _cell(v) -> str:
+                """편집 표 셀 값을 문자열로 정규화 (None/NaN → 빈 문자열)."""
+                if v is None:
+                    return ""
+                try:
+                    if pd.isna(v):
+                        return ""
+                except (TypeError, ValueError):
+                    pass
+                return str(v).strip()
+
             cp1, cp2 = st.columns([2, 1])
             with cp1:
                 edited = st.data_editor(
@@ -295,19 +311,25 @@ with left:
                         "name": st.column_config.TextColumn("기업명"),
                         "ticker": st.column_config.TextColumn("종목코드", help="6자리, 비워두면 기업명으로 자동 조회"),
                     },
-                    key="peers_editor")
+                    key=f"peers_editor_{st.session_state['peers_ver']}")
 
                 # 편집된 각 행에서 비어 있는 쪽(기업명/코드)을 KRX 목록으로 채운다
-                filled_rows = []
+                normalized_rows, filled_rows = [], []
                 for _, row in edited.iterrows():
-                    nm, tk = krx_lookup.autofill(row.get("name", ""), str(row.get("ticker", "") or ""))
+                    nm_raw, tk_raw = _cell(row.get("name")), _cell(row.get("ticker"))
+                    normalized_rows.append({"name": nm_raw, "ticker": tk_raw})
+                    nm, tk = krx_lookup.autofill(nm_raw, tk_raw)
                     filled_rows.append({"name": nm, "ticker": tk})
+                normalized = pd.DataFrame(normalized_rows or [{"name": "", "ticker": ""}])
                 filled = pd.DataFrame(filled_rows or [{"name": "", "ticker": ""}])
-                # 자동 완성으로 값이 바뀌었으면 표를 갱신해 다시 렌더링 (변경 시에만, 무한 루프 방지)
-                if not filled.reset_index(drop=True).equals(edited.reset_index(drop=True)):
+
+                # 자동완성으로 값이 바뀌었으면: 편집 내역을 표 데이터로 흡수하고
+                # 위젯을 새로 초기화(key 변경)해 채워진 값이 화면에 반영되게 한다
+                if not filled.reset_index(drop=True).equals(normalized.reset_index(drop=True)):
                     st.session_state["peers_df"] = filled
+                    st.session_state["peers_ver"] += 1
                     st.rerun()
-                peers_df = edited
+                peers_df = filled
             with cp2:
                 lookback = st.number_input("수집 기간 (년)", 0.5, 5.0, 1.0, 0.5)
                 manual_vol = st.number_input("변동성 직접 입력 (%, 0=자동)", 0.0, 200.0, 0.0, 1.0,
