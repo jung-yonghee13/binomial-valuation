@@ -23,7 +23,7 @@ from valuation import run_valuation
 
 ROOT = Path(__file__).parent
 ACCENT = "#E8490F"  # 포인트 컬러 (보고서 오렌지 계열)
-APP_BUILD = "2026-07-16.3"  # 배포 버전 확인용 (푸시 시 갱신)
+APP_BUILD = "2026-07-16.4"  # 배포 버전 확인용 (푸시 시 갱신)
 
 st.set_page_config(page_title="이항모형 가치평가", page_icon="📊", layout="wide")
 
@@ -327,19 +327,20 @@ with left:
                         return _cell(r.get("name")), _cell(r.get("ticker"))
                     return "", ""  # 새로 추가된 행
 
-                normalized_rows, filled_rows = [], []
+                filled_rows = []
                 for i in range(len(edited)):
                     row = edited.iloc[i]
                     nm_raw, tk_raw = _cell(row.get("name")), _cell(row.get("ticker"))
-                    normalized_rows.append({"name": nm_raw, "ticker": tk_raw})
                     pv_nm, pv_tk = _prev_at(i)
                     nm, tk = krx_lookup.autofill_directed(
                         nm_raw, tk_raw,
                         name_changed=(nm_raw != pv_nm),
                         ticker_changed=(tk_raw != pv_tk))
                     filled_rows.append({"name": nm, "ticker": tk})
-                normalized = pd.DataFrame(normalized_rows or [{"name": "", "ticker": ""}])
                 filled = pd.DataFrame(filled_rows or [{"name": "", "ticker": ""}])
+                prev_normalized = pd.DataFrame(
+                    [{"name": _cell(r.get("name")), "ticker": _cell(r.get("ticker"))}
+                     for _, r in prev_df.iterrows()] or [{"name": "", "ticker": ""}])
 
                 def _for_widget(df: pd.DataFrame) -> pd.DataFrame:
                     # 드롭다운(Selectbox) 칸의 빈 값은 ""가 아닌 None이어야 한다
@@ -347,13 +348,13 @@ with left:
                     out["name"] = out["name"].map(lambda v: v if v else None)
                     return out
 
-                # 자동완성으로 값이 바뀌었으면: 편집 내역을 표 데이터로 흡수하고
-                # 위젯을 새로 초기화(key 변경)해 채워진 값이 화면에 반영되게 한다
-                if not filled.reset_index(drop=True).equals(normalized.reset_index(drop=True)):
+                # 편집·삭제·추가·자동완성 등 어떤 변화든 즉시 세션에 흡수하고
+                # 위젯을 재초기화(key 변경)한다 — 삭제한 행이 부활하거나
+                # 편집 내역이 이중 적용되는 문제를 원천 차단
+                if not filled.reset_index(drop=True).equals(prev_normalized.reset_index(drop=True)):
                     st.session_state["peers_df"] = _for_widget(filled)
                     st.session_state["peers_ver"] += 1
                     st.rerun()
-                st.session_state["peers_df"] = _for_widget(filled)  # 다음 편집의 비교 기준
                 peers_df = filled
             with cp2:
                 lookback = st.number_input("수집 기간 (년)", 0.5, 5.0, 1.0, 0.5)
