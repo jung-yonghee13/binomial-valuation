@@ -23,6 +23,7 @@ from valuation import run_valuation
 
 ROOT = Path(__file__).parent
 ACCENT = "#E8490F"  # 포인트 컬러 (보고서 오렌지 계열)
+APP_BUILD = "2026-07-16.2"  # 배포 버전 확인용 (푸시 시 갱신)
 
 st.set_page_config(page_title="이항모형 가치평가", page_icon="📊", layout="wide")
 
@@ -112,7 +113,8 @@ st.markdown(
 st.markdown('<div class="brand-title">이항모형 가치평가 엔진</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="brand-sub">계약조건과 피어그룹만 입력하면 — 변동성·무위험이자율 자동 수집 → '
-    "CRR 이항모형 평가 → 몬테카를로 교차검증 → PDF 평가보고서까지 자동 수행합니다.</div>",
+    "CRR 이항모형 평가 → 몬테카를로 교차검증 → PDF 평가보고서까지 자동 수행합니다."
+    f'<br><span style="font-size:0.7rem;color:#a8a8b8">build {APP_BUILD}</span></div>',
     unsafe_allow_html=True,
 )
 

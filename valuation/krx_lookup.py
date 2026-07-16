@@ -52,14 +52,20 @@ def _load_listing_snapshot() -> "list[tuple[str, str]]":
 
 
 def _load_listing() -> "list[tuple[str, str]]":
-    """상장목록 확보: 실시간 수집을 우선하고, 실패하면 동봉 스냅샷으로 폴백한다."""
+    """상장목록 확보: 동봉 스냅샷을 우선 사용한다 (즉시 응답·결정론적).
+
+    실시간 수집(fdr.StockListing)은 배포 서버(해외 IP)에서 차단되거나 수십 초씩
+    지연될 수 있어 UI 자동완성 용도로는 부적합하다. 스냅샷 파일이 없을 때만
+    실시간 수집을 시도한다. (신규 상장사 반영이 필요하면 스냅샷을 재생성:
+    python -c "from valuation import krx_lookup, csv 사용 예는 저장소 이력 참조")
+    """
     try:
-        listing = _load_listing_live()
+        listing = _load_listing_snapshot()
         if listing:
             return listing
     except Exception:
-        pass  # 네트워크 차단(해외 IP 등)·일시 장애 → 스냅샷 사용
-    return _load_listing_snapshot()
+        pass  # 스냅샷 누락·손상 → 실시간 수집 시도
+    return _load_listing_live()
 
 
 def _normalize(name: str) -> str:
