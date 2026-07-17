@@ -23,9 +23,13 @@ from valuation import run_valuation
 
 ROOT = Path(__file__).parent
 ACCENT = "#E8490F"  # 포인트 컬러 (보고서 오렌지 계열)
-APP_BUILD = "2026-07-16.4"  # 배포 버전 확인용 (푸시 시 갱신)
+APP_BUILD = "2026-07-17.1"  # 배포 버전 확인용 (푸시 시 갱신)
 
-st.set_page_config(page_title="이항모형 가치평가", page_icon="📊", layout="wide")
+st.set_page_config(
+    page_title="이항모형 가치평가",
+    page_icon=str(ROOT / "assets" / "favicon.png"),  # 이항트리 로고 (assets/favicon.png)
+    layout="wide",
+)
 
 # ── 스타일: 쿨 블루-라벤더 그라데이션 배경 + 흰 카드 + 오렌지 포인트 ──
 st.markdown(
@@ -37,6 +41,11 @@ st.markdown(
     }
     header[data-testid="stHeader"] { background: transparent; }
     .block-container { padding-top: 1.1rem; }
+
+    /* Streamlit Cloud가 붙이는 소유자 노출 요소 숨김
+       (우하단 GitHub 아바타 배지, 상단 Deploy/Fork 버튼, 기본 푸터) */
+    [class*="viewerBadge"], [data-testid="appCreatorAvatar"],
+    .stAppDeployButton, footer { display: none !important; }
 
     .brand-title {
         color: #E8490F; font-size: 2.3rem; font-weight: 800;
