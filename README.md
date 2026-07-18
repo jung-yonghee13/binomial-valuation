@@ -22,7 +22,7 @@ streamlit run app.py          # 웹 대시보드
 ```mermaid
 flowchart LR
   subgraph acquire["1 · 데이터 수집"]
-    A["피어그룹 주가<br/>KRX 시세 API"]
+    A["피어그룹 주가<br/>KRX 시세 (FinanceDataReader)"]
     B["국고채 수익률<br/>Seibro 자동 수집"]
     C["계약 조건<br/>대시보드 입력 / JSON"]
   end
@@ -50,8 +50,8 @@ flowchart LR
 
 | 데이터 | 수집 방식 | 구현 |
 |--------|-----------|------|
-| 주가 (변동성 산출용) | **API 연동** — FinanceDataReader로 KRX 일별 종가 수집. 상장 기초자산은 자기 주가, 비상장은 피어그룹 주가를 수집 | `valuation/volatility.py` |
-| 국고채 수익률 | **무료 공개 데이터 직접 호출** — Seibro(한국예탁결제원) 채권만기수익률을 HTTP 요청으로 수집. API 키·브라우저·토큰 불필요, 휴일이면 직전 영업일로 자동 소급 | `valuation/seibro.py` |
+| 주가 (변동성 산출용) | **오픈소스 라이브러리 활용** — FinanceDataReader로 KRX 일별 종가 수집. 상장 기초자산은 자기 주가, 비상장은 피어그룹 주가를 수집 | `valuation/volatility.py` |
+| 국고채 수익률 | **공개 조회화면의 내부 데이터 요청 직접 호출** — Seibro(한국예탁결제원) 채권만기수익률 화면이 내부적으로 쓰는 백엔드 요청을 재현해 수집 (공식 오픈API가 아니므로 키 발급·브라우저·토큰 불필요). 휴일이면 직전 영업일로 자동 소급 | `valuation/seibro.py` |
 | 계약 조건 | 대시보드 직접 입력 또는 계약정보 JSON 첨부 (계약서 문서 → JSON 자동 추출은 로드맵) | `app.py` / `data/*.json` |
 
 > KOFIA 채권정보센터는 공식 API가 없고 WAF가 스크립트 접근을 차단합니다(진단 완료). 동일 성격의 수익률을 무료 제공하는 Seibro를 기본 수집원으로 사용하며, KOFIA는 에이전트 브라우저 수집(스킬 2-B-a)을 폴백으로 유지합니다.
