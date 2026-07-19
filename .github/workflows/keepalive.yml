@@ -1,0 +1,40 @@
+# Streamlit Community Cloud keepalive — 12시간 무활동 슬립 방지
+# 단순 HTTP ping은 활동으로 집계되지 않으므로 Playwright 실제 브라우저 세션으로 접속한다.
+name: keepalive
+
+on:
+  schedule:
+    - cron: "23 */6 * * *" # 6시간 간격(UTC). 정각을 피해 GitHub cron 지연 완화
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Wake Streamlit app
+        env:
+          APP_URL: ${{ vars.KEEPALIVE_APP_URL || 'https://binomial-valuation-engine.streamlit.app/' }}
+        run: node .github/scripts/keepalive.mjs
+
+      - name: Upload failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keepalive-failure
+          path: keepalive-failure.png
+          if-no-files-found: ignore
