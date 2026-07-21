@@ -1,0 +1,35 @@
+# Render keepalive — 15분 무활동 슬립 방지
+# Render는 단순 HTTP 요청도 활동으로 집계되므로 curl 핑으로 충분하다(브라우저 불필요).
+# GitHub 예약 크론은 지연될 수 있어 15분보다 짧은 10분 주기로 여유를 둔다.
+name: keepalive-render
+
+on:
+  schedule:
+    - cron: "*/10 * * * *" # 10분 간격 (Render 15분 슬립 전에 깨움)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Render app
+        env:
+          RENDER_URL: ${{ vars.KEEPALIVE_RENDER_URL || 'https://binomial-valuation.onrender.com' }}
+        run: |
+          # 콜드스타트(최대 ~60s) 대비 넉넉한 타임아웃. 먼저 가벼운 health, 실패 시 루트로 재시도.
+          code=$(curl -sS -m 90 -o /dev/null -w "%{http_code}" "$RENDER_URL/_stcore/health" || echo "000")
+          echo "health status: $code"
+          if [ "$code" != "200" ]; then
+            code=$(curl -sS -m 90 -o /dev/null -w "%{http_code}" "$RENDER_URL/" || echo "000")
+            echo "root status: $code"
+          fi
+          if [ "$code" = "200" ]; then
+            echo "✅ Render app awake ($code)"
+          else
+            echo "⚠ 예상치 못한 상태 ($code)"
+            exit 1
+          fi
