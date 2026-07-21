@@ -23,7 +23,7 @@ from valuation import run_valuation
 
 ROOT = Path(__file__).parent
 ACCENT = "#E8490F"  # 포인트 컬러 (보고서 오렌지 계열)
-APP_BUILD = "2026-07-17.1"  # 배포 버전 확인용 (푸시 시 갱신)
+APP_BUILD = "2026-07-21.1"  # 배포 버전 확인용 (푸시 시 갱신)
 
 st.set_page_config(
     page_title="이항모형 가치평가",
@@ -31,101 +31,449 @@ st.set_page_config(
     layout="wide",
 )
 
-# ── 스타일: 쿨 블루-라벤더 그라데이션 배경 + 흰 카드 + 오렌지 포인트 ──
+# ══════════════════════════════════════════════════════════════════════
+#  Valuation Suite 디자인 시스템 (design-system.md 토큰만 사용)
+#  — 색·간격·라운드·폰트는 아래 단일 <style> 블록의 CSS 변수로만 관리 —
+# ══════════════════════════════════════════════════════════════════════
 st.markdown(
     """
     <style>
-    .stApp {
-        background: linear-gradient(155deg, #E7EDFA 0%, #EDE9FB 48%, #FBEEF2 100%);
-        background-attachment: fixed;
+    :root{
+      /* 배경/표면 */
+      --bg:#F6F4EF; --surface:#FFFFFF; --ink:#17150F; --ink-soft:#262117;
+      /* 텍스트 */
+      --text:#1E1B16; --text-mut:#8B857A; --text-inv:#F6F4EF;
+      /* 포인트 */
+      --accent:#E8490F; --accent-2:#F2A03D; --success:#3BA55D;
+      /* 선/그림자 */
+      --line:#EBE7DE; --node-out:#C9C2B4;
+      --shadow:0 1px 2px rgba(23,21,15,.04), 0 8px 24px rgba(23,21,15,.06);
+      --glow:0 0 0 1px rgba(232,73,15,.15), 0 12px 40px rgba(232,73,15,.18);
+      /* 형태 */
+      --r-card:16px; --r-tile:12px; --r-pill:999px; --pad-card:20px; --gap:16px;
     }
-    header[data-testid="stHeader"] { background: transparent; }
-    .block-container { padding-top: 1.1rem; }
+    .stApp{ background:var(--bg); }
+    header[data-testid="stHeader"]{ background:transparent; }
+    .block-container{ padding-top:.8rem; max-width:1500px; }
+    html, body, [class*="css"]{
+      font-family:"Pretendard","Noto Sans KR",-apple-system,"Segoe UI",Roboto,sans-serif;
+    }
+    .vs-num{ font-variant-numeric:tabular-nums; }
 
-    /* Streamlit Cloud가 붙이는 소유자 노출 요소 숨김
-       (우하단 GitHub 아바타 배지, 상단 Deploy/Fork 버튼, 기본 푸터) */
+    /* 기본 크롬 숨김 (메뉴·푸터·deploy·소유자 배지) */
+    #MainMenu, footer, [data-testid="stToolbar"],
     [class*="viewerBadge"], [data-testid="appCreatorAvatar"],
-    .stAppDeployButton, footer { display: none !important; }
+    .stAppDeployButton{ display:none !important; }
 
-    .brand-title {
-        color: #E8490F; font-size: 2.3rem; font-weight: 800;
-        letter-spacing: -0.01em; line-height: 1.1; margin: 0 0 0.3rem 0;
-        text-align: center;
-    }
-    .brand-sub { color: #5a5f70; font-size: 0.92rem; margin-bottom: 0.6rem;
-        text-align: center; }
+    /* ── 네비 레일 (다크 사이드바) ── */
+    [data-testid="stSidebar"]{ background:var(--ink); border-right:1px solid #000; }
+    [data-testid="stSidebar"] *{ color:var(--text-inv); }
+    [data-testid="stSidebarUserContent"]{ padding-top:1.1rem; }
+    .vs-brand{ display:flex; align-items:center; gap:10px; padding:2px 4px 14px 4px;
+      border-bottom:1px solid rgba(246,244,239,.10); margin-bottom:12px; }
+    .vs-logo{ width:30px; height:30px; background:var(--accent); border-radius:8px;
+      transform:rotate(45deg); box-shadow:0 4px 14px rgba(232,73,15,.45); flex:0 0 auto; }
+    .vs-brand-name{ font-size:15px; font-weight:700; line-height:1.1; }
+    .vs-brand-sub{ font-size:10px; letter-spacing:.10em; text-transform:uppercase;
+      color:rgba(246,244,239,.45); margin-top:2px; }
+    .vs-nav-item{ display:flex; align-items:center; gap:10px; padding:9px 12px;
+      border-radius:10px; font-size:13.5px; color:rgba(246,244,239,.72);
+      margin:2px 0; border-left:3px solid transparent; }
+    .vs-nav-item .ic{ width:16px; text-align:center; opacity:.85; }
+    .vs-nav-item.active{ background:var(--ink-soft); color:var(--accent);
+      border-left:3px solid var(--accent); font-weight:600; }
+    .vs-status{ display:inline-flex; align-items:center; gap:8px; margin-top:14px;
+      padding:7px 14px; border-radius:var(--r-pill); background:var(--ink-soft);
+      font-size:11.5px; color:rgba(246,244,239,.80); }
+    .vs-dot{ width:8px; height:8px; border-radius:50%; background:var(--success);
+      box-shadow:0 0 0 3px rgba(59,165,93,.22); }
 
-    /* 섹션 카드 */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        background: #FFFFFF; border: 1px solid #E4E4F0; border-radius: 18px;
-        box-shadow: 0 4px 16px rgba(70, 70, 110, 0.08);
-        padding: 0.4rem 0.9rem 0.7rem 0.9rem;
+    /* ── 상단 바 ── */
+    .vs-topbar{ display:flex; align-items:center; justify-content:space-between;
+      gap:16px; padding:10px 4px 16px 4px; flex-wrap:wrap; }
+    .vs-crumb{ font-size:13px; color:var(--text-mut); font-weight:500; }
+    .vs-crumb b{ color:var(--text); font-weight:700; }
+    .vs-crumb .sep{ margin:0 8px; opacity:.55; }
+    .vs-top-right{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .vs-search{ display:flex; align-items:center; gap:8px; padding:7px 14px;
+      background:var(--surface); border:1px solid var(--line); border-radius:var(--r-pill);
+      color:var(--text-mut); font-size:12.5px; min-width:150px; }
+    .vs-export{ padding:8px 16px; background:var(--accent); color:#fff; font-weight:600;
+      font-size:12.5px; border-radius:var(--r-pill); box-shadow:0 4px 12px rgba(232,73,15,.25); }
+    .vs-avatar{ width:34px; height:34px; border-radius:50%; background:var(--ink);
+      color:var(--text-inv); display:flex; align-items:center; justify-content:center;
+      font-size:12.5px; font-weight:700; flex:0 0 auto; }
+    .vs-runat{ font-size:11px; color:var(--text-mut); text-align:right; line-height:1.35; }
+
+    /* ── 히어로 결과카드 (다크 + 오렌지 글로우) ── */
+    .vs-hero{ position:relative; background:var(--ink); color:var(--text-inv);
+      border-radius:var(--r-card); padding:26px 28px; box-shadow:var(--glow);
+      background-image:radial-gradient(120% 90% at 0% 0%, rgba(242,160,61,.20), transparent 58%);
+      overflow:hidden; }
+    .vs-hero-label{ font-size:12px; letter-spacing:.06em; text-transform:uppercase;
+      color:rgba(246,244,239,.55); }
+    .vs-hero-value{ font-size:46px; font-weight:700; line-height:1.05; margin:8px 0 6px 0;
+      font-variant-numeric:tabular-nums; }
+    .vs-hero-value small{ font-size:20px; font-weight:600; color:rgba(246,244,239,.65);
+      margin-left:6px; }
+    .vs-hero-sub{ font-size:14px; color:var(--accent-2); font-weight:600;
+      font-variant-numeric:tabular-nums; }
+    .vs-hero-badge{ position:absolute; top:22px; right:24px; font-size:12px;
+      font-weight:600; padding:5px 13px; border-radius:var(--r-pill); }
+    .vs-badge-ok{ background:rgba(59,165,93,.16); color:#7FD69A; }
+    .vs-badge-wait{ background:rgba(246,244,239,.10); color:rgba(246,244,239,.60); }
+
+    /* ── KPI 스탯 타일 ── */
+    .vs-kpirow{ display:flex; gap:var(--gap); margin-top:var(--gap); flex-wrap:wrap; }
+    .vs-tile{ flex:1 1 160px; background:var(--surface); border-radius:var(--r-tile);
+      padding:16px 18px; box-shadow:var(--shadow); border:1px solid var(--line); }
+    .vs-tile .lab{ color:var(--text-mut); font-size:11.5px; letter-spacing:.04em;
+      text-transform:uppercase; }
+    .vs-tile .val{ font-size:25px; font-weight:700; color:var(--text); margin-top:4px;
+      font-variant-numeric:tabular-nums; }
+    .vs-tile .sub{ color:var(--text-mut); font-size:11.5px; margin-top:2px; }
+    .vs-tile .val.ok{ color:var(--success); }
+
+    /* ── 입력 변수 표 ── */
+    .vs-vartable{ width:100%; border-collapse:collapse; font-size:13px; }
+    .vs-vartable td{ padding:8px 4px; border-bottom:1px solid var(--line); }
+    .vs-vartable tr:last-child td{ border-bottom:none; }
+    .vs-vartable .sym{ color:var(--accent); font-weight:700; width:38px;
+      font-family:"Cambria Math",Georgia,serif; }
+    .vs-vartable .lab{ color:var(--text-mut); }
+    .vs-vartable .val{ text-align:right; font-weight:600; color:var(--text);
+      font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+    /* ── 모형 파라미터 칩 (Greeks 칩 컴포넌트 재사용) ── */
+    .vs-chips{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .vs-chip{ display:flex; align-items:center; gap:10px; padding:9px 11px;
+      background:rgba(232,73,15,.06); border:1px solid rgba(232,73,15,.14);
+      border-radius:12px; }
+    .vs-chip .g{ width:28px; height:28px; border-radius:8px; background:rgba(232,73,15,.14);
+      color:var(--accent); display:flex; align-items:center; justify-content:center;
+      font-weight:700; font-size:14px; font-family:"Cambria Math",Georgia,serif; flex:0 0 auto; }
+    .vs-chip .g-name{ font-size:11px; color:var(--text-mut); line-height:1.2; }
+    .vs-chip .g-val{ font-size:14px; font-weight:700; color:var(--text);
+      font-variant-numeric:tabular-nums; }
+
+    /* ── 격자 컨테이너 (좁은 화면 가로 스크롤 허용) ── */
+    .vs-lattice-wrap{ overflow-x:auto; }
+    .vs-legend{ display:flex; gap:16px; font-size:11.5px; color:var(--text-mut);
+      margin-top:8px; }
+    .vs-legend span{ display:inline-flex; align-items:center; gap:6px; }
+    .vs-lg-fill{ width:11px; height:11px; border-radius:50%; background:var(--accent); }
+    .vs-lg-out{ width:11px; height:11px; border-radius:50%; background:#fff;
+      border:1.6px solid var(--node-out); }
+
+    .vs-section{ font-size:15px; font-weight:600; color:var(--text); margin:2px 0 10px 0; }
+    .vs-note{ font-size:11.5px; color:var(--text-mut); }
+
+    /* ── 카드형 컨테이너 (입력 섹션) ── */
+    div[data-testid="stVerticalBlockBorderWrapper"]{
+      background:var(--surface); border:1px solid var(--line);
+      border-radius:var(--r-card); box-shadow:var(--shadow);
+      padding:.5rem 1rem .8rem 1rem;
     }
-    div[data-testid="stVerticalBlockBorderWrapper"] h3 {
-        color: #2d2d2d; font-size: 1.12rem; padding-top: 0.4rem; font-weight: 800;
-        border-bottom: 2px solid #F4D9C8; padding-bottom: 0.45rem;
+    div[data-testid="stVerticalBlockBorderWrapper"] h3{
+      color:var(--text); font-size:1.05rem; padding-top:.35rem; font-weight:700;
+      border-bottom:1px solid var(--line); padding-bottom:.45rem;
     }
-    div[data-testid="stVerticalBlockBorderWrapper"] h3 .num {
-        color: #FB5607; font-size: 1.55rem; font-weight: 800; margin-right: 0.5rem;
-        vertical-align: -0.08rem;
+    div[data-testid="stVerticalBlockBorderWrapper"] h3 .num{
+      color:var(--accent); font-size:.82rem; font-weight:700; margin-right:.55rem;
+      background:rgba(232,73,15,.10); padding:3px 9px; border-radius:var(--r-pill);
+      vertical-align:.12rem; letter-spacing:.04em;
     }
 
-    /* ── 입력 위젯: 테두리를 넣어 배경과 확실히 구분 ── */
+    /* ── 입력 위젯: 흰 표면 + 헤어라인, 포커스 오렌지 ── */
     div[data-baseweb="input"], div[data-baseweb="select"] > div,
-    div[data-baseweb="base-input"] {
-        background: #FFFFFF !important;
-        border: 1.5px solid #E3CDBB !important;
-        border-radius: 10px !important;
-        transition: border-color .15s ease, box-shadow .15s ease;
+    div[data-baseweb="base-input"]{
+      background:var(--surface) !important; border:1px solid var(--line) !important;
+      border-radius:10px !important; transition:border-color .15s ease, box-shadow .15s ease;
     }
-    div[data-baseweb="input"]:hover, div[data-baseweb="select"] > div:hover {
-        border-color: #D3A987 !important;
+    div[data-baseweb="input"]:hover, div[data-baseweb="select"] > div:hover{
+      border-color:var(--node-out) !important;
     }
-    div[data-baseweb="input"]:focus-within, div[data-baseweb="select"] > div:focus-within {
-        border-color: #E8490F !important;
-        box-shadow: 0 0 0 3px rgba(232, 73, 15, 0.13) !important;
+    div[data-baseweb="input"]:focus-within, div[data-baseweb="select"] > div:focus-within{
+      border-color:var(--accent) !important;
+      box-shadow:0 0 0 3px rgba(232,73,15,.13) !important;
     }
-    div[data-baseweb="input"] input, div[data-baseweb="base-input"] input {
-        background: transparent !important;
+    div[data-baseweb="input"] input, div[data-baseweb="base-input"] input{
+      background:transparent !important;
     }
-    div[data-testid="stNumberInputStepUp"], div[data-testid="stNumberInputStepDown"] {
-        background: #FFF8F2; border-left: 1px solid #E3CDBB;
+    div[data-testid="stNumberInputStepUp"], div[data-testid="stNumberInputStepDown"]{
+      background:#FBF7F1; border-left:1px solid var(--line);
     }
-    div[data-testid="stFileUploaderDropzone"] {
-        background: #FFF8F2; border: 1.5px dashed #E3A77E; border-radius: 12px;
+    div[data-testid="stFileUploaderDropzone"]{
+      background:#FBF7F1; border:1.5px dashed var(--accent-2); border-radius:12px;
     }
-    div[data-testid="stDataFrame"], div[data-testid="stDataEditor"] {
-        border: 1.5px solid #E3CDBB; border-radius: 10px; overflow: hidden;
+    div[data-testid="stDataFrame"], div[data-testid="stDataEditor"]{
+      border:1px solid var(--line); border-radius:10px; overflow:hidden;
     }
 
     /* 버튼: 오렌지 필 */
-    .stButton > button, .stDownloadButton > button {
-        border-radius: 14px; font-weight: 700; padding: 0.55rem 1rem;
+    .stButton > button, .stDownloadButton > button{
+      border-radius:12px; font-weight:600; padding:.55rem 1rem; border:1px solid var(--line);
     }
-    .stButton > button[kind="primary"] {
-        background: #E8490F; border: none;
-        box-shadow: 0 4px 12px rgba(232, 73, 15, 0.25);
+    .stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"]{
+      background:var(--accent); border:none; color:#fff;
+      box-shadow:0 4px 12px rgba(232,73,15,.25);
     }
-    .stButton > button[kind="primary"]:hover { background: #C93E0C; }
+    .stButton > button[kind="primary"]:hover,
+    .stDownloadButton > button[kind="primary"]:hover{ background:#C93E0C; }
 
-    /* 지표 타일 */
-    div[data-testid="stMetric"] {
-        background: #FFF8F2; border: 1px solid #F4D9C8; border-radius: 14px;
-        padding: 0.6rem 0.9rem;
+    /* 탭 강조 */
+    button[data-baseweb="tab"]{ font-size:13px; }
+    [data-baseweb="tab-highlight"]{ background:var(--accent) !important; }
+
+    /* 지표 타일 (탭 내부 잔여용) */
+    div[data-testid="stMetric"]{
+      background:var(--surface); border:1px solid var(--line); border-radius:var(--r-tile);
+      padding:.6rem .9rem;
     }
-    div[data-testid="stMetricValue"] { color: #E8490F; font-weight: 800; font-size: 1.5rem; }
+    div[data-testid="stMetricValue"]{ color:var(--accent); font-weight:700; font-size:1.4rem; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.markdown('<div class="brand-title">이항모형 가치평가 엔진</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="brand-sub">계약조건과 피어그룹만 입력하면 — 변동성·무위험이자율 자동 수집 → '
-    "CRR 이항모형 평가 → 몬테카를로 교차검증 → PDF 평가보고서까지 자동 수행합니다."
-    f'<br><span style="font-size:0.7rem;color:#a8a8b8">build {APP_BUILD}</span></div>',
-    unsafe_allow_html=True,
-)
+
+# ──────────────────────────────────────────────────────────────────────
+#  프레젠테이션 헬퍼 (반복 마크업은 함수로, 토큰은 CSS 변수로만)
+# ──────────────────────────────────────────────────────────────────────
+def _won(x: float, dec: int = 0) -> str:
+    return f"{x:,.{dec}f}"
+
+
+def render_sidebar() -> None:
+    """좌측 다크 네비 레일: 브랜드 + 메뉴 + 하단 상태 pill."""
+    nav = [
+        ("▶", "평가 실행", True), ("▦", "대시보드", False),
+        ("∿", "평가모형", False), ("⑃", "시나리오", False),
+        ("▤", "리포트", False), ("◈", "데이터", False),
+    ]
+    items = "".join(
+        f'<div class="vs-nav-item{" active" if act else ""}">'
+        f'<span class="ic">{ic}</span><span>{lab}</span></div>'
+        for ic, lab, act in nav
+    )
+    with st.sidebar:
+        st.markdown(
+            '<div class="vs-brand"><div class="vs-logo"></div>'
+            '<div><div class="vs-brand-name">Valuation Suite</div>'
+            '<div class="vs-brand-sub">CRR 이항모형</div></div></div>'
+            f'{items}'
+            f'<div class="vs-status"><span class="vs-dot"></span>'
+            f'CRR · 정상 가동</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def render_topbar(last_run: str) -> None:
+    """상단 바: 브레드크럼 · 검색 · 보고서 내보내기 · 아바타 · 최종 실행 시각."""
+    st.markdown(
+        '<div class="vs-topbar">'
+        '<div class="vs-crumb">가치평가<span class="sep">/</span>파생상품'
+        '<span class="sep">/</span><b>이항모형</b></div>'
+        '<div class="vs-top-right">'
+        '<div class="vs-search">⌕ 계약·종목 검색</div>'
+        '<div class="vs-export">보고서 내보내기</div>'
+        '<div class="vs-avatar">VS</div>'
+        f'<div class="vs-runat">최종 실행<br>{last_run}<br>'
+        f'<span style="opacity:.7">build {APP_BUILD}</span></div>'
+        '</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_hero(result: dict | None) -> None:
+    """히어로 결과카드: 공정가치(주당) 큰 숫자 + 교차검증 대비 + 배지."""
+    if not result:
+        st.markdown(
+            '<div class="vs-hero">'
+            '<div class="vs-hero-badge vs-badge-wait">대기 중</div>'
+            '<div class="vs-hero-label">옵션 공정가치 (주당)</div>'
+            '<div class="vs-hero-value">— <small>원</small></div>'
+            '<div class="vs-hero-sub" style="color:rgba(246,244,239,.55)">'
+            '좌측에 조건을 입력하고 가치평가 실행을 누르면 결과가 표시됩니다</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        return
+    r = result["results"]
+    cc = result["cross_check"]
+    unit = r["unit_value_krw"]
+    if cc.get("skipped"):
+        sub = "몬테카를로 교차검증: 생략됨"
+    else:
+        diff = cc["mc_value"] - unit
+        sign = "+" if diff >= 0 else "−"
+        sub = (f"몬테카를로 교차검증 대비 {sign}{_won(abs(diff), 2)}원 "
+               f"(MC {_won(cc['mc_value'], 0)}원)")
+    badge = ('<div class="vs-hero-badge vs-badge-ok">평가 완료 ✓</div>'
+             if cc.get("skipped") or cc.get("passed")
+             else '<div class="vs-hero-badge vs-badge-wait">교차검증 확인 필요</div>')
+    st.markdown(
+        f'<div class="vs-hero">{badge}'
+        '<div class="vs-hero-label">옵션 공정가치 (주당)</div>'
+        f'<div class="vs-hero-value">{_won(unit, 0)} <small>원</small></div>'
+        f'<div class="vs-hero-sub">{sub}</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_kpis(result: dict) -> None:
+    """KPI 스탯 타일 행: 내재가치 · 시간가치 · 총 평가액 · 교차검증."""
+    vi = result["valuation_inputs"]
+    r = result["results"]
+    cc = result["cross_check"]
+    s0 = vi["underlying_price_krw"]
+    strike = vi["strike_price_krw"]
+    unit = r["unit_value_krw"]
+    intrinsic = max(s0 - strike, 0.0)           # max(S₀−K, 0) — 단순 표시 산술
+    time_value = max(unit - intrinsic, 0.0)     # 공정가치 − 내재가치
+    if cc.get("skipped"):
+        cc_val, cc_cls, cc_sub = "생략", "", "교차검증 미실행"
+    elif cc.get("passed"):
+        cc_val, cc_cls, cc_sub = "합격 ✓", "ok", "95% 신뢰구간 내"
+    else:
+        cc_val, cc_cls, cc_sub = "불합격 ✗", "", "신뢰구간 밖"
+    tiles = [
+        ("내재가치", f"{_won(intrinsic, 0)} <small style='font-size:14px'>원</small>",
+         "max(S₀ − K, 0) · 주당"),
+        ("시간가치", f"{_won(time_value, 0)} <small style='font-size:14px'>원</small>",
+         "공정가치 − 내재가치"),
+        ("총 평가액", f"{_won(r['total_value_krw'] / 1e8, 2)} <small style='font-size:14px'>억원</small>",
+         f"{_won(unit, 0)}원 × {r['quantity_shares']:,}주"),
+        ("몬테카를로 교차검증", cc_val, cc_sub),
+    ]
+    cells = "".join(
+        f'<div class="vs-tile"><div class="lab">{lab}</div>'
+        f'<div class="val {cls if lab.endswith("교차검증") else ""}">{val}</div>'
+        f'<div class="sub">{sub}</div></div>'
+        for (lab, val, sub), cls in zip(tiles, ["", "", "", cc_cls])
+    )
+    st.markdown(f'<div class="vs-kpirow">{cells}</div>', unsafe_allow_html=True)
+
+
+def _crr_params(vi: dict) -> tuple[float, float, float]:
+    """결과에 담긴 σ·r·q·Δt로부터 CRR 배수/위험중립확률을 재현(표시용)."""
+    import math
+    sigma = vi["volatility"]["value"]
+    rf = vi["risk_free_rate"]["value"]
+    q = vi["dividend_yield"]
+    dt = vi["step_years"]
+    u = math.exp(sigma * math.sqrt(dt))
+    d = 1.0 / u
+    growth = math.exp((rf - q) * dt)
+    p = (growth - d) / (u - d)
+    return u, d, p
+
+
+def render_var_table(vi: dict) -> None:
+    """평가 입력 변수 표 (기호 S₀·K·σ·r·q·T·n·u/d·p 병기)."""
+    u, d, p = _crr_params(vi)
+    style = ("유럽형 (만기 일괄 행사)" if vi["exercise_style"] == "european"
+             else "미국형 (기간 중 행사)")
+    rows = [
+        ("S₀", "기초자산 가액", f"{_won(vi['underlying_price_krw'], 0)} 원"),
+        ("K", "행사가격", f"{_won(vi['strike_price_krw'], 0)} 원"),
+        ("K(T)", "만기 행사가격", f"{_won(vi['strike_at_maturity_krw'], 0)} 원"),
+        ("σ", "변동성 (연)", f"{vi['volatility']['value'] * 100:.2f} %"),
+        ("r", "무위험이자율", f"{vi['risk_free_rate']['value'] * 100:.3f} %"),
+        ("q", "배당수익률", f"{vi['dividend_yield'] * 100:.2f} %"),
+        ("T", "잔존만기", f"{vi['maturity_years']:.3f} 년"),
+        ("n", "트리 스텝 수", f"{vi['binomial_steps']:,}"),
+        ("Δt", "스텝 간격", f"{vi['step_years']:.4f} 년"),
+        ("u", "상승배수", f"{u:.5f}"),
+        ("d", "하락배수", f"{d:.5f}"),
+        ("p", "위험중립확률", f"{p:.4f}"),
+        ("—", "행사방식", style),
+    ]
+    body = "".join(
+        f'<tr><td class="sym">{sym}</td><td class="lab">{lab}</td>'
+        f'<td class="val">{val}</td></tr>'
+        for sym, lab, val in rows
+    )
+    st.markdown(f'<table class="vs-vartable">{body}</table>', unsafe_allow_html=True)
+
+
+def render_lattice(vi: dict, steps: int = 4) -> None:
+    """이항 격자 개념도 (SVG): 실제 u·d 배수로 재결합 트리 구조를 표시.
+    ITM(노드가≥K)=오렌지 채움, OTM=흰 배경+외곽선. 실제 스텝 수는 캡션에 명기."""
+    u, d, _ = _crr_params(vi)
+    s0 = vi["underlying_price_krw"]
+    strike = vi["strike_price_krw"]
+    W, H, pad = 360, 240, 26
+    x_gap = (W - 2 * pad) / steps
+    y_gap = (H - 2 * pad) / (2 * steps)
+    cx = W / 2
+    edges, nodes = [], []
+    coords = {}
+    for i in range(steps + 1):
+        x = pad + i * x_gap
+        for j in range(i + 1):                       # j = 상승 횟수
+            y = pad + (H - 2 * pad) / 2 + (i - 2 * j) * y_gap
+            coords[(i, j)] = (x, y)
+    for i in range(steps):
+        for j in range(i + 1):
+            x0, y0 = coords[(i, j)]
+            for nj in (j, j + 1):
+                x1, y1 = coords[(i + 1, nj)]
+                edges.append(
+                    f'<line x1="{x0:.1f}" y1="{y0:.1f}" x2="{x1:.1f}" y2="{y1:.1f}" '
+                    f'stroke="#EBE7DE" stroke-width="1.4"/>')
+    for (i, j), (x, y) in coords.items():
+        price = s0 * (u ** j) * (d ** (i - j))
+        itm = price >= strike
+        fill = "#E8490F" if itm else "#FFFFFF"
+        stroke = "#E8490F" if itm else "#C9C2B4"
+        txt = "#FFFFFF" if itm else "#8B857A"
+        nodes.append(
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="11" fill="{fill}" '
+            f'stroke="{stroke}" stroke-width="1.6"/>'
+            f'<text x="{x:.1f}" y="{y + 3:.1f}" font-size="7.5" text-anchor="middle" '
+            f'fill="{txt}" font-weight="600">{price / 1000:.1f}k</text>')
+    svg = (f'<div class="vs-lattice-wrap"><svg viewBox="0 0 {W} {H}" width="100%" '
+           f'style="max-width:{W}px">{"".join(edges)}{"".join(nodes)}</svg></div>'
+           '<div class="vs-legend">'
+           '<span><span class="vs-lg-fill"></span>ITM (노드가 ≥ K)</span>'
+           '<span><span class="vs-lg-out"></span>OTM (노드가 &lt; K)</span></div>'
+           f'<div class="vs-note" style="margin-top:6px">개념도(4스텝) — '
+           f'실제 평가는 n = {vi["binomial_steps"]:,} 스텝 재결합 트리로 계산됩니다.</div>')
+    st.markdown(svg, unsafe_allow_html=True)
+
+
+def render_param_chips(vi: dict) -> None:
+    """모형 파라미터 칩 (Greeks 칩 컴포넌트 스타일 재사용).
+    Greeks는 엔진이 산출하지 않으므로, 실제 CRR 구동 파라미터를 칩으로 표시(허구 금지)."""
+    u, d, p = _crr_params(vi)
+    chips = [
+        ("σ", "변동성 (연)", f"{vi['volatility']['value'] * 100:.2f}%"),
+        ("r", "무위험이자율", f"{vi['risk_free_rate']['value'] * 100:.3f}%"),
+        ("q", "배당수익률", f"{vi['dividend_yield'] * 100:.2f}%"),
+        ("p", "위험중립확률", f"{p:.4f}"),
+        ("u", "상승배수", f"{u:.4f}"),
+        ("d", "하락배수", f"{d:.4f}"),
+    ]
+    cells = "".join(
+        f'<div class="vs-chip"><div class="g">{g}</div>'
+        f'<div><div class="g-name">{name}</div><div class="g-val">{val}</div></div></div>'
+        for g, name, val in chips
+    )
+    st.markdown(f'<div class="vs-chips">{cells}</div>', unsafe_allow_html=True)
+
+
+# ── 네비 레일 + 상단 바 렌더 ──
+_last_run = "—"
+if "result" in st.session_state:
+    _last_run = st.session_state["result"].get("meta", {}).get("run_at", "—")
+render_sidebar()
+render_topbar(_last_run)
+
+# ── 히어로·KPI 슬롯 (결과 계산 후 채운다) ──
+hero_slot = st.container()
+kpi_slot = st.container()
 
 left, right = st.columns([3, 2], gap="medium")
 
@@ -379,9 +727,19 @@ with left:
                                    format_func=lambda s: "자동 — Seibro 국고채 수익률 수집" if s == "auto" else "직접 입력")
             manual_rf = st.number_input("직접 입력 시 금리 (%, 연속복리)", 0.0, 20.0, 3.0, 0.05,
                                         disabled=(rf_mode == "auto"))
-            discounting = st.selectbox(
-                "할인 방식", ["term_structure", "spot"],
-                format_func=lambda s: "기간구조 — 스텝별 선도이자율 (실무 방식)" if s == "term_structure" else "단일 spot rate")
+            # 직접 입력 금리는 수익률 곡선이 없어 기간구조 할인이 불가하다.
+            # 잘못된 조합(직접입력+기간구조)이 성립하지 못하도록 UI에서 spot으로 고정한다.
+            if rf_mode == "manual":
+                st.selectbox(
+                    "할인 방식", ["단일 spot rate (직접 입력 금리는 이 방식만 가능)"],
+                    disabled=True,
+                    help="직접 입력한 단일 금리는 기간구조(스텝별 선도이자율) 할인을 쓸 수 없습니다. "
+                         "기간구조 할인을 쓰려면 무위험이자율을 '자동'으로 두세요.")
+                discounting = "spot"
+            else:
+                discounting = st.selectbox(
+                    "할인 방식", ["term_structure", "spot"],
+                    format_func=lambda s: "기간구조 — 스텝별 선도이자율 (실무 방식)" if s == "term_structure" else "단일 spot rate")
         with c8:
             step_unit = st.selectbox("트리 스텝", ["weekly", "custom"],
                                      format_func=lambda s: "주 단위 (실무 방식)" if s == "weekly" else "스텝 수 직접 지정")
@@ -392,6 +750,28 @@ with left:
 
 # ── 실행 ──
 if run_clicked:
+    # ── 실행 전 입력 사전 검증: 엔진에 도달하기 전 잘못된 조합을 명확히 차단한다 ──
+    #   (오도성 메시지·raw 예외로 표면화되기 전에 사용자 언어로 안내)
+    preflight_errors = []
+    # F3: 상장인데 종목코드가 없고 변동성 자동이면 → 자기 주가 산출 불가
+    if listing_status == "상장" and not underlying_ticker.strip() and manual_vol == 0.0:
+        preflight_errors.append(
+            "상장 기초자산은 **종목코드(6자리)** 가 필요합니다. "
+            "상단 계약 조건에서 종목코드를 입력하거나, 변동성을 직접 입력(%>0)하세요."
+        )
+    # F4: 보유자 행사비율 합계 > 100%면 실행 자체를 차단 (엔진 도달 전)
+    if _total_ratio > 1 + 1e-9:
+        preflight_errors.append(
+            f"보유자 행사비율 합계가 {_total_ratio*100:.1f}%로 100%를 초과합니다. "
+            "행사비율을 조정하세요."
+        )
+
+if run_clicked and preflight_errors:
+    with right:
+        for _msg in preflight_errors:
+            st.error(_msg)
+
+if run_clicked and not preflight_errors:
     contract = {
         "meta": {"description": "대시보드 입력 계약정보"},
         "contract": {
@@ -456,10 +836,10 @@ if run_clicked:
         with right:
             st.error(f"평가 실패: {exc}")
 
-# ════════════════════════════ 우측: 결과 미리보기 ════════════════════════════
+# ════════════════════════════ 우측: 결과 분석 패널 ════════════════════════════
 with right:
     with st.container(border=True):
-        st.markdown('### <span class="num">06</span> 결과 미리보기', unsafe_allow_html=True)
+        st.markdown('### <span class="num">06</span> 결과 분석', unsafe_allow_html=True)
 
         if "result" not in st.session_state:
             st.info("좌측에 조건을 입력하고 **가치평가 실행**을 누르면 결과와 보고서 미리보기가 여기에 표시됩니다.")
@@ -470,19 +850,22 @@ with right:
             r = result["results"]
             cc = result["cross_check"]
 
-            m1, m2 = st.columns(2)
-            m1.metric("1주당 공정가치", f"{r['unit_value_krw']:,.0f} 원")
-            m2.metric("총 평가액", f"{r['total_value_krw'] / 1e8:,.2f} 억원",
-                      help=f"{r['unit_value_krw']:,.2f}원 × {r['quantity_shares']:,}주")
-            m3, m4 = st.columns(2)
-            if cc.get("skipped"):
-                m3.metric("몬테카를로 교차검증", "생략", help=cc["reason"])
-            else:
-                m3.metric("몬테카를로 교차검증", "합격 ✓" if cc["passed"] else "불합격 ✗",
-                          help=f"MC {cc['mc_value']:,.2f}원, 95% CI [{cc['ci'][0]:,.2f}, {cc['ci'][1]:,.2f}]")
-            m4.metric("변동성 / 금리",
-                      f"{vi['volatility']['value']*100:.2f}% / {vi['risk_free_rate']['value']*100:.3f}%")
+            # ── 평가 입력 변수 표 (S₀·K·σ·r·q·T·n·u/d·p) ──
+            st.markdown('<div class="vs-section">평가 입력 변수</div>', unsafe_allow_html=True)
+            render_var_table(vi)
 
+            # ── 이항 격자 (Binomial Lattice) ──
+            st.markdown('<div class="vs-section" style="margin-top:16px">이항 격자 (Binomial Lattice)</div>',
+                        unsafe_allow_html=True)
+            render_lattice(vi)
+
+            # ── 모형 파라미터 칩 ──
+            st.markdown('<div class="vs-section" style="margin-top:16px">모형 파라미터 (CRR)</div>',
+                        unsafe_allow_html=True)
+            render_param_chips(vi)
+
+            st.markdown('<div class="vs-section" style="margin-top:16px">상세 · 보고서</div>',
+                        unsafe_allow_html=True)
             tab0, tab1, tab2, tab3, tab4 = st.tabs(
                 ["보고서 미리보기", "변동성", "금리·선도", "민감도", "JSON"])
 
@@ -557,13 +940,37 @@ with right:
                                    use_container_width=True)
             with d2:
                 if st.button("PDF 평가보고서 생성", use_container_width=True):
+                    st.session_state.pop("report_html", None)
                     try:
                         with st.spinner("PDF 변환 중..."):
                             pdf_path = report_module.generate_report(contract_path, result_path, out_dir)
                         st.session_state["pdf"] = (pdf_path.name, pdf_path.read_bytes())
                     except Exception as exc:
-                        st.error(f"보고서 생성 실패: {exc}")
+                        # PDF 변환 실패(배포 환경 chromium 부재 등) → HTML 보고서로 폴백
+                        #   조용한 실패 방지: 다운로드 가능한 HTML 산출물을 제공한다
+                        try:
+                            html_path = report_module.generate_report(
+                                contract_path, result_path, out_dir, html_only=True)
+                            st.session_state["report_html"] = (
+                                html_path.name, html_path.read_bytes())
+                            st.warning(
+                                f"⚠ PDF 변환에 실패해 HTML 보고서로 대체했습니다({exc}). "
+                                "아래에서 HTML을 내려받아 브라우저로 열거나 인쇄(PDF 저장)하세요.")
+                        except Exception as exc2:
+                            st.error(f"보고서 생성 실패: {exc2}")
                 if "pdf" in st.session_state:
                     name, data = st.session_state["pdf"]
                     st.download_button("PDF 다운로드", data, file_name=name, mime="application/pdf",
                                        type="primary", use_container_width=True)
+                if "report_html" in st.session_state:
+                    name, data = st.session_state["report_html"]
+                    st.download_button("HTML 보고서 다운로드 (PDF 폴백)", data, file_name=name,
+                                       mime="text/html", type="primary", use_container_width=True)
+
+# ══ 상단 히어로·KPI 슬롯 채우기 (본문 계산 이후 — 최신 세션 결과 반영) ══
+#   컬럼보다 먼저 생성한 컨테이너에 나중에 렌더해 시각적 위계(히어로→KPI→본문)를 만든다.
+with hero_slot:
+    render_hero(st.session_state.get("result"))
+if "result" in st.session_state:
+    with kpi_slot:
+        render_kpis(st.session_state["result"])

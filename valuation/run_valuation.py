@@ -45,6 +45,43 @@ def years_between(start: str, end: str) -> float:
     return days / DAYS_PER_YEAR
 
 
+def _peer_vol_fallback(valuation_date, exc: Exception) -> dict:
+    """FDR(피어 주가) 실시간 수집이 차단·타임아웃될 때 번들 변동성 스냅샷으로 폴백한다.
+
+    SEIBRO 무위험이자율 폴백(resolve_risk_free)과 동일한 방식:
+    번들된 실제 피어 변동성 스냅샷을 사용하되, 결과·보고서에 폴백 사실과 근거
+    (스냅샷 날짜·산출 기간)를 투명하게 노출한다(조용한 대체 금지).
+    """
+    fallback_path = Path(__file__).resolve().parent.parent / "data" / "fallback_peer_vol.json"
+    if not fallback_path.exists():
+        raise RuntimeError(
+            f"피어 주가 수집 실패({type(exc).__name__}: {exc}). 배포 환경에서 차단된 것으로 "
+            "보입니다. 변동성을 직접 입력하거나 나중에 다시 시도하세요."
+        ) from exc
+    snap = load_json(fallback_path)
+    note = (
+        f"⚠ FDR 실시간 수집 실패({type(exc).__name__}) → "
+        f"번들 피어 변동성 스냅샷({snap.get('date')}) 폴백 사용"
+    )
+    detail = {
+        "mean_volatility": snap["mean_volatility"],
+        "peers": snap["peers"],
+        "failed_peers": [],
+        "lookback_years": snap.get("lookback_years"),
+        "trading_days": snap.get("trading_days", volatility.TRADING_DAYS),
+        "period": snap.get("period"),
+        "data_source": f"{note} | {snap.get('data_source', 'FinanceDataReader (KRX 시세) 스냅샷')}",
+        "fallback_used": True,
+        "snapshot_date": snap.get("date"),
+    }
+    return {
+        "value": float(snap["mean_volatility"]),
+        "basis": f"피어그룹(대용기업) 역사적 변동성 산술평균 (자동 산출) — {note}",
+        "fallback_used": True,
+        "detail": detail,
+    }
+
+
 def resolve_volatility(inputs: dict, contract: dict) -> dict:
     """변동성 입력을 해석한다.
 
@@ -52,6 +89,9 @@ def resolve_volatility(inputs: dict, contract: dict) -> dict:
     - "auto"이고 기초자산이 상장주식이면: 자기 주가로 변동성 직접 산출 (피어그룹 불필요)
     - "auto"이고 비상장이면: 피어그룹 주가를 수집해 역사적 변동성 평균을 산출
     반환 dict에는 값과 함께 산출 근거(basis)와 상세 내역(detail)이 담긴다.
+
+    실시간 시세(FDR) 수집이 배포 환경(해외 IP)에서 차단·타임아웃되면
+    번들 피어 변동성 스냅샷으로 폴백한다(SEIBRO 폴백과 동일, 투명 표기).
     """
     value = inputs["inputs"]["volatility"]
     if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -64,16 +104,21 @@ def resolve_volatility(inputs: dict, contract: dict) -> dict:
     lookback = est.get("lookback_years", 1.0)
     trading_days = est.get("annualization_factor", volatility.TRADING_DAYS)
     underlying = contract.get("underlying", {})
+    valuation_date = inputs["inputs"]["valuation_date"]
 
     # 상장주식이면 자기 주가로 직접 산출 (피어그룹이 필요 없다)
     if underlying.get("listing_status") == "상장" and underlying.get("ticker"):
-        detail = volatility.own_stock_volatility(
-            ticker=underlying["ticker"],
-            name=underlying.get("issuer", underlying["ticker"]),
-            valuation_date=inputs["inputs"]["valuation_date"],
-            lookback_years=lookback,
-            trading_days=trading_days,
-        )
+        try:
+            detail = volatility.own_stock_volatility(
+                ticker=underlying["ticker"],
+                name=underlying.get("issuer", underlying["ticker"]),
+                valuation_date=valuation_date,
+                lookback_years=lookback,
+                trading_days=trading_days,
+            )
+        except (OSError, volatility.PriceFetchError) as exc:
+            # 자기 주가 실시간 수집 차단 → 번들 피어 변동성 스냅샷으로 폴백(투명 표기)
+            return _peer_vol_fallback(valuation_date, exc)
         return {
             "value": detail["mean_volatility"],
             "basis": "기초자산(상장주식) 자기 주가의 역사적 변동성",
@@ -86,12 +131,16 @@ def resolve_volatility(inputs: dict, contract: dict) -> dict:
             "비상장 기초자산의 변동성 자동 산출에는 피어그룹이 필요합니다. "
             "volatility_estimation.peer_group을 지정하거나 변동성을 직접 입력하세요."
         )
-    detail = volatility.peer_group_volatility(
-        peer_group=est["peer_group"],
-        valuation_date=inputs["inputs"]["valuation_date"],
-        lookback_years=lookback,
-        trading_days=trading_days,
-    )
+    try:
+        detail = volatility.peer_group_volatility(
+            peer_group=est["peer_group"],
+            valuation_date=valuation_date,
+            lookback_years=lookback,
+            trading_days=trading_days,
+        )
+    except (OSError, volatility.PriceFetchError) as exc:
+        # 피어 다수 실패/전면 차단 → 번들 피어 변동성 스냅샷으로 폴백(투명 표기)
+        return _peer_vol_fallback(valuation_date, exc)
     return {
         "value": detail["mean_volatility"],
         "basis": "피어그룹(대용기업) 역사적 변동성 산술평균 (자동 산출)",
@@ -188,7 +237,8 @@ def run(contract: dict, inputs: dict) -> dict:
     core = inputs["inputs"]
 
     # ── 필수 입력 확인: 없으면 기본값으로 채우지 않고 즉시 중단 ──
-    for key in ("valuation_date", "underlying_price_krw"):
+    #   (strike_price_krw·maturity_date 누락 시 하위에서 raw KeyError가 나지 않도록 포함)
+    for key in ("valuation_date", "underlying_price_krw", "strike_price_krw", "maturity_date"):
         if not core.get(key):
             raise ValueError(f"주요변수 '{key}'가 입력되지 않았습니다.")
     if terms["option_type"] != "call":

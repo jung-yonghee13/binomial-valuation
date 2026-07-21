@@ -1,8 +1,9 @@
 [theme]
-primaryColor = "#E8490F"
-backgroundColor = "#EAEEF9"
-secondaryBackgroundColor = "#FFFFFF"
-textColor = "#2D2D2D"
+# Valuation Suite 디자인 토큰 (design-system.md §1)
+primaryColor = "#E8490F"          # --accent 오렌지
+backgroundColor = "#F6F4EF"       # --bg 크림 오프화이트
+secondaryBackgroundColor = "#FFFFFF"  # --surface 카드
+textColor = "#1E1B16"             # --text 본문
 font = "sans serif"
 
 [server]

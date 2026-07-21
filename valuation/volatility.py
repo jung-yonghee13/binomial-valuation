@@ -21,6 +21,16 @@ import pandas as pd
 
 TRADING_DAYS = 252     # 연환산 계수 (1년 영업일 수)
 MIN_OBSERVATIONS = 30  # 이보다 관측치가 적으면 통계적으로 무의미하므로 계산 거부
+MIN_PEER_SUCCESS = 2   # 피어그룹 부분실패 허용 시 최소 성공 피어 수 (미달이면 폴백/실패)
+
+
+class PriceFetchError(RuntimeError):
+    """시세 수집 실패를 나타내는 예외 (네트워크 차단·타임아웃·빈 응답 등).
+
+    raw requests/urllib 예외를 이 타입으로 래핑해, 상위(resolve_volatility)가
+    SEIBRO 폴백과 동일한 방식으로 일관되게 잡아 스냅샷 폴백으로 넘어갈 수 있게 한다.
+    RuntimeError를 상속하므로 기존 `except RuntimeError` 경로와도 호환된다.
+    """
 
 
 def annualized_volatility(prices, trading_days: int = TRADING_DAYS) -> float:
@@ -55,9 +65,17 @@ def fetch_close_prices(ticker: str, start, end) -> pd.Series:
             "시세 수집에는 FinanceDataReader가 필요합니다: pip install finance-datareader"
         ) from exc
 
-    df = fdr.DataReader(ticker, start, end)
+    try:
+        df = fdr.DataReader(ticker, start, end)
+    except Exception as exc:
+        # FinanceDataReader 내부는 requests 계열 예외(ConnectionError/Timeout 등)를
+        # 그대로 누출한다. 배포 환경(해외 IP) 차단·타임아웃을 일관된 타입으로 래핑해
+        # 상위에서 SEIBRO 폴백과 동일하게 잡을 수 있게 한다.
+        raise PriceFetchError(
+            f"종목 {ticker}의 시세 수집에 실패했습니다 ({type(exc).__name__}: {exc})."
+        ) from exc
     if df.empty or "Close" not in df.columns:
-        raise RuntimeError(f"종목 {ticker}의 시세를 가져오지 못했습니다 ({start} ~ {end}).")
+        raise PriceFetchError(f"종목 {ticker}의 시세를 가져오지 못했습니다 ({start} ~ {end}).")
     return df["Close"].dropna()
 
 
@@ -66,11 +84,17 @@ def peer_group_volatility(
     valuation_date,
     lookback_years: float = 1.0,
     trading_days: int = TRADING_DAYS,
+    min_success: int = MIN_PEER_SUCCESS,
 ) -> dict:
     """피어그룹 각 사의 변동성을 계산하고 산술평균을 반환한다.
 
     peer_group 형식: [{"name": "안랩", "ticker": "053800"}, ...]
     (입력 파일 data/valuation_inputs_template.json의 volatility_estimation.peer_group)
+
+    부분 실패 허용: 일부 피어의 시세 수집이 실패해도 성공한 피어들만으로 평균을
+    산출하고, 실패한 피어는 사유와 함께 반환 dict의 failed_peers에 기록한다.
+    단, 성공한 피어가 min_success개(피어 총수보다 크면 총수로 하향) 미만이면
+    통계적으로 무의미하므로 PriceFetchError로 실패시킨다(상위에서 스냅샷 폴백).
 
     반환 dict에는 적용 변동성(mean_volatility)과 함께
     피어별 산출 내역이 담겨 보고서에 그대로 수록된다.
@@ -83,13 +107,22 @@ def peer_group_volatility(
     start = end - pd.Timedelta(days=round(lookback_years * 365.25))
 
     peers = []
+    failed_peers = []
     for peer in peer_group:
-        prices = fetch_close_prices(peer["ticker"], start, end)
-        vol = annualized_volatility(prices, trading_days)
+        name = peer.get("name", peer["ticker"])
+        try:
+            prices = fetch_close_prices(peer["ticker"], start, end)
+            vol = annualized_volatility(prices, trading_days)
+        except (PriceFetchError, ValueError) as exc:
+            # 개별 피어 실패(시세 차단·관측치 부족 등)는 전체를 중단하지 않는다.
+            failed_peers.append(
+                {"name": name, "ticker": peer["ticker"], "reason": str(exc)}
+            )
+            continue
         # 보고서 수록용 산출 내역 (어떤 데이터로 어떻게 계산했는지 남긴다)
         peers.append(
             {
-                "name": peer.get("name", peer["ticker"]),
+                "name": name,
                 "ticker": peer["ticker"],
                 "volatility": vol,
                 "observations": int(len(prices)),
@@ -98,11 +131,20 @@ def peer_group_volatility(
             }
         )
 
+    required = min(min_success, len(peer_group))
+    if len(peers) < required:
+        reasons = "; ".join(f"{f['name']}({f['ticker']}): {f['reason']}" for f in failed_peers)
+        raise PriceFetchError(
+            f"피어그룹 시세 수집 실패: {len(peers)}/{len(peer_group)}개만 성공 "
+            f"(최소 {required}개 필요). 실패 내역 → {reasons}"
+        )
+
     # 피어 변동성의 산술평균 = 기초자산 변동성으로 적용할 값
     mean_vol = float(np.mean([p["volatility"] for p in peers]))
     return {
         "mean_volatility": mean_vol,
         "peers": peers,
+        "failed_peers": failed_peers,
         "lookback_years": lookback_years,
         "trading_days": trading_days,
         "period": {"start": str(start.date()), "end": str(end.date())},

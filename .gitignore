@@ -18,3 +18,11 @@ desktop.ini
 results/
 *.xlsx
 ~$*
+
+# 하네스 팀 중간 산출물 (감사 추적용, 커밋 제외)
+_workspace/
+_workspace_prev/
+
+# 로컬 플러그인/머신별 설정
+.claude/settings.json
+.claude/settings.local.json

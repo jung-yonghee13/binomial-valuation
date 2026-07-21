@@ -30,7 +30,7 @@ EMPTY_XML = '<?xml version="1.0" encoding="UTF-8" ?><vector result="0"></vector>
 
 class TestFetchTreasuryCurve:
     def test_parses_treasury_row(self, monkeypatch):
-        monkeypatch.setattr(seibro, "_fetch_xml", lambda dt: TREASURY_XML)
+        monkeypatch.setattr(seibro, "_fetch_xml", lambda dt, timeout=None: TREASURY_XML)
         curve = seibro.fetch_treasury_curve("2026-06-30")
         assert curve["maturities"] == [0.25, 0.5, 0.75, 1.0, 3.0, 5.0, 10.0, 20.0]
         assert curve["yields"][0] == pytest.approx(0.0279)
@@ -40,7 +40,7 @@ class TestFetchTreasuryCurve:
     def test_holiday_falls_back_to_previous_business_day(self, monkeypatch):
         calls = []
 
-        def fake_fetch(dt):
+        def fake_fetch(dt, timeout=None):
             calls.append(dt)
             return EMPTY_XML if dt in ("20260712", "20260711") else TREASURY_XML
 
@@ -53,19 +53,19 @@ class TestFetchTreasuryCurve:
     def test_zero_yields_are_dropped(self, monkeypatch):
         # 국민주택1종처럼 미고시 구간이 0으로 오는 행 대응 (국고채권 행 자체에 0이 있어도 제외)
         xml = TREASURY_XML.replace('<YY20_XPIR_PRATE value="4.25"/>', '<YY20_XPIR_PRATE value="0"/>')
-        monkeypatch.setattr(seibro, "_fetch_xml", lambda dt: xml)
+        monkeypatch.setattr(seibro, "_fetch_xml", lambda dt, timeout=None: xml)
         curve = seibro.fetch_treasury_curve("2026-06-30")
         assert 20.0 not in curve["maturities"]
 
     def test_exhausted_lookback_raises(self, monkeypatch):
-        monkeypatch.setattr(seibro, "_fetch_xml", lambda dt: EMPTY_XML)
+        monkeypatch.setattr(seibro, "_fetch_xml", lambda dt, timeout=None: EMPTY_XML)
         with pytest.raises(RuntimeError, match="Seibro"):
             seibro.fetch_treasury_curve("2026-06-30", max_lookback_days=3)
 
     def test_curve_feeds_bootstrap(self, monkeypatch):
         from valuation.risk_free import spot_rate, step_forward_rates
 
-        monkeypatch.setattr(seibro, "_fetch_xml", lambda dt: TREASURY_XML)
+        monkeypatch.setattr(seibro, "_fetch_xml", lambda dt, timeout=None: TREASURY_XML)
         curve = seibro.fetch_treasury_curve("2026-06-30")
         r = spot_rate(curve["maturities"], curve["yields"], 2.7)
         assert 0.0 < r < 0.1
