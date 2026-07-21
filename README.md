@@ -11,7 +11,9 @@ streamlit run app.py          # 웹 대시보드
 
 옵션이 내재된 증권의 공정가치 평가는 실무에서 주로 엑셀로 수행되지만, 트리 스텝이 촘촘해지거나 전환가액 조정(리픽싱)·조기상환권 같은 조건이 붙으면 관리가 어렵고 느려집니다. 이 프로젝트는 평가 로직을 파이썬으로 구현하여 재현 가능하고 확장 가능한 평가 파이프라인을 만드는 것을 목표로 합니다.
 
-> **배포**: Streamlit Community Cloud에 GitHub 저장소를 연결하면 push할 때마다 자동 재배포됩니다. 리눅스 배포 환경에 필요한 PDF 변환용 chromium과 한글 폰트는 `packages.txt`에 포함되어 있습니다.
+> **🚀 라이브 데모**: **https://binomial-valuation.onrender.com/** (Render 무료 티어 · Docker 배포)
+>
+> **배포**: GitHub 저장소를 연결해 두어 push할 때마다 자동 재배포됩니다. PDF 변환용 chromium과 한글 폰트는 `Dockerfile`에 포함되어 있습니다. (무료 티어라 미사용 시 잠들며 첫 접속에 30~60초 콜드스타트가 있을 수 있습니다.)
 
 ---
 
