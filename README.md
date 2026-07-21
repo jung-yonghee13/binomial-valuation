@@ -1,6 +1,10 @@
 # 이항모형 기반 밸류에이션 자동화 (Binomial Model Valuation Automation)
 
+[![Live Demo](https://img.shields.io/badge/▶%20Live%20Demo-binomial--valuation.onrender.com-E8490F?style=for-the-badge)](https://binomial-valuation.onrender.com/)
+
 콜옵션의 공정가치 평가를 **시장 데이터 수집부터 PDF 평가보고서까지 자동화**하는 프로젝트입니다.
+
+**🔗 라이브 데모: https://binomial-valuation.onrender.com/**
 
 계약조건과 피어그룹을 입력하면, 피어 주가와 국고채 수익률을 자동으로 수집해 변동성·무위험이자율을 산출하고, CRR 이항모형으로 평가한 뒤, 몬테카를로 시뮬레이션으로 교차검증하고, 평가보고서(PDF)를 생성합니다.
 
