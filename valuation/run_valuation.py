@@ -114,20 +114,41 @@ def resolve_risk_free(inputs: dict, maturity_years: float) -> dict:
         raise ValueError("risk_free_rate는 숫자 또는 'auto'여야 합니다.")
 
     # 곡선 확보 우선순위: ① 지정된 곡선 파일 ② Seibro 무료 조회 자동 수집
+    #   ③ Seibro가 배포 환경(해외 IP)에서 차단·타임아웃되면 번들 스냅샷으로 폴백
     est = inputs.get("risk_free_estimation", {})
     curve_file = est.get("ytm_curve_file")
+    fallback_note = None
     if curve_file:
         curve = risk_free.load_ytm_curve(curve_file)
     else:
-        curve = seibro.fetch_treasury_curve(inputs["inputs"]["valuation_date"])
+        try:
+            curve = seibro.fetch_treasury_curve(inputs["inputs"]["valuation_date"])
+        except (OSError, RuntimeError) as exc:
+            # 네트워크 차단/타임아웃 등 → 번들된 실제 국고채 스냅샷으로 폴백(투명 표기)
+            fallback_path = Path(__file__).resolve().parent.parent / "data" / "fallback_ytm_curve.json"
+            if not fallback_path.exists():
+                raise RuntimeError(
+                    f"Seibro 국고채 수집 실패({exc}). 배포 환경에서 차단된 것으로 보입니다. "
+                    "무위험이자율을 직접 입력하거나 ytm_curve_file을 지정하세요."
+                ) from exc
+            curve = risk_free.load_ytm_curve(fallback_path)
+            fallback_note = (
+                f"⚠ Seibro 실시간 수집 실패({type(exc).__name__}) → "
+                f"번들 국고채 스냅샷({curve.get('date')}) 폴백 사용"
+            )
 
     rate = risk_free.spot_rate(curve["maturities"], curve["yields"], maturity_years)
+    basis = "국고채 수익률 곡선 부트스트래핑 spot rate, 잔존만기 보간, 연속복리 환산"
+    if fallback_note:
+        basis = f"{basis} — {fallback_note}"
     return {
         "value": rate,
-        "basis": "국고채 수익률 곡선 부트스트래핑 spot rate, 잔존만기 보간, 연속복리 환산",
+        "basis": basis,
+        "fallback_used": bool(fallback_note),
         "detail": {
             "curve_date": curve.get("date"),
-            "curve_source": curve.get("source", est.get("data_source")),
+            "curve_source": (fallback_note + " | " if fallback_note else "")
+            + str(curve.get("source", est.get("data_source"))),
             "curve_file": curve_file,
             "maturities": curve["maturities"],
             "yields": curve["yields"],

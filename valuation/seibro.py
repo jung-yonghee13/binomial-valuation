@@ -54,11 +54,15 @@ _HEADERS = {
 }
 
 
-def _fetch_xml(std_dt: str) -> str:
-    """지정일의 채권만기수익률 XML 응답을 받아온다."""
+def _fetch_xml(std_dt: str, timeout: float = 10) -> str:
+    """지정일의 채권만기수익률 XML 응답을 받아온다.
+
+    배포 환경(해외 IP)에서는 seibro.or.kr 접근이 차단·지연되므로 timeout을 짧게 잡아
+    빨리 실패시키고, 상위(resolve_risk_free)에서 번들 스냅샷으로 폴백하도록 한다.
+    """
     payload = _PAYLOAD.format(std_dt=std_dt).encode("utf-8")
     req = urllib.request.Request(SEIBRO_URL, data=payload, headers=_HEADERS, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read().decode("utf-8")
 
 
