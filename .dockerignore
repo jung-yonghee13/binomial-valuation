@@ -1,0 +1,16 @@
+# 런타임에 불필요한 것 제외 (이미지 경량화)
+.git
+.github
+.claude
+tests
+docs
+_workspace
+_workspace_prev
+results
+reports
+**/__pycache__
+*.pyc
+.pytest_cache
+.devcontainer
+*.md
+!README.md
