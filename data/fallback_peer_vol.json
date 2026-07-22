@@ -2,7 +2,7 @@
   "description": "피어그룹 역사적 변동성 스냅샷 (배포 환경에서 FinanceDataReader 실시간 수집이 차단될 때의 폴백). 한국 IP(로컬)에서 실제 산출한 값.",
   "date": "2026-07-22",
   "data_source": "FinanceDataReader (KRX 시세) — 번들 스냅샷 폴백",
-  "mean_volatility": 0.39406325872337417,
+  "mean_volatility": 0.39415230538930796,
   "lookback_years": 1.0,
   "trading_days": 252,
   "period": {
@@ -13,7 +13,7 @@
     {
       "name": "안랩",
       "ticker": "053800",
-      "volatility": 0.2921775071228222,
+      "volatility": 0.2927959277657361,
       "observations": 244,
       "first_date": "2025-07-22",
       "last_date": "2026-07-22"
@@ -29,7 +29,7 @@
     {
       "name": "한글과컴퓨터",
       "ticker": "030520",
-      "volatility": 0.4415484859622481,
+      "volatility": 0.4412063084442936,
       "observations": 244,
       "first_date": "2025-07-22",
       "last_date": "2026-07-22"
@@ -37,7 +37,7 @@
     {
       "name": "웹케시",
       "ticker": "053580",
-      "volatility": 0.4359106279814694,
+      "volatility": 0.4360391684970401,
       "observations": 244,
       "first_date": "2025-07-22",
       "last_date": "2026-07-22"
@@ -45,7 +45,7 @@
     {
       "name": "알서포트",
       "ticker": "131370",
-      "volatility": 0.38770286653890296,
+      "volatility": 0.3877433162280417,
       "observations": 244,
       "first_date": "2025-07-22",
       "last_date": "2026-07-22"
