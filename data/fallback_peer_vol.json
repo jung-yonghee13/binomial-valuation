@@ -1,54 +1,54 @@
 {
   "description": "피어그룹 역사적 변동성 스냅샷 (배포 환경에서 FinanceDataReader 실시간 수집이 차단될 때의 폴백). 한국 IP(로컬)에서 실제 산출한 값.",
-  "date": "2026-07-21",
+  "date": "2026-07-22",
   "data_source": "FinanceDataReader (KRX 시세) — 번들 스냅샷 폴백",
-  "mean_volatility": 0.39425070643771754,
+  "mean_volatility": 0.39406325872337417,
   "lookback_years": 1.0,
   "trading_days": 252,
   "period": {
-    "start": "2025-07-21",
-    "end": "2026-07-21"
+    "start": "2025-07-22",
+    "end": "2026-07-22"
   },
   "peers": [
     {
       "name": "안랩",
       "ticker": "053800",
-      "volatility": 0.29198844188137835,
+      "volatility": 0.2921775071228222,
       "observations": 244,
-      "first_date": "2025-07-21",
-      "last_date": "2026-07-21"
+      "first_date": "2025-07-22",
+      "last_date": "2026-07-22"
     },
     {
       "name": "더존비즈온",
       "ticker": "012510",
-      "volatility": 0.4128832818678151,
-      "observations": 240,
-      "first_date": "2025-07-21",
+      "volatility": 0.41297680601142805,
+      "observations": 239,
+      "first_date": "2025-07-22",
       "last_date": "2026-07-14"
     },
     {
       "name": "한글과컴퓨터",
       "ticker": "030520",
-      "volatility": 0.44144200220299584,
+      "volatility": 0.4415484859622481,
       "observations": 244,
-      "first_date": "2025-07-21",
-      "last_date": "2026-07-21"
+      "first_date": "2025-07-22",
+      "last_date": "2026-07-22"
     },
     {
       "name": "웹케시",
       "ticker": "053580",
-      "volatility": 0.43723029835208976,
+      "volatility": 0.4359106279814694,
       "observations": 244,
-      "first_date": "2025-07-21",
-      "last_date": "2026-07-21"
+      "first_date": "2025-07-22",
+      "last_date": "2026-07-22"
     },
     {
       "name": "알서포트",
       "ticker": "131370",
-      "volatility": 0.3877095078843086,
+      "volatility": 0.38770286653890296,
       "observations": 244,
-      "first_date": "2025-07-21",
-      "last_date": "2026-07-21"
+      "first_date": "2025-07-22",
+      "last_date": "2026-07-22"
     }
   ]
 }
